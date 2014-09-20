@@ -1,0 +1,1 @@
+obj-${CONFIG_AS_SPI_GPIO}	+= as-spi-gpio.o

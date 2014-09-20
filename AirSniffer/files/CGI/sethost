@@ -1,0 +1,21 @@
+#!/bin/sh
+
+SIGNAL_FIFO=/tmp/assigfifo
+
+echo "Content-type: text/html"
+echo ""
+cat << EOF
+<html>
+    <head>
+        <title>Received</title>
+    </head>
+    <body>
+        <h2>Host information received</h2>
+        <p>Please wait while the device trys to connect to host<p>
+    </body>
+</html>
+EOF
+
+eval $(echo "$QUERY_STRING"|awk -F'&' '{for(i=1;i<=NF;i++){print $i}}')
+
+echo "wifi_setup_agent $ssid $key" > $SIGNAL_FIFO

@@ -1,0 +1,4 @@
+config AS_SPI_GPIO_DEV
+	tristate "AirSniffer GPIO-based SPI device"
+	depends on GENERIC_GPIO
+	select SPI_GPIO

@@ -1,0 +1,6 @@
+config AS_SPI_GPIO
+	tristate "AirSniffer GPIO-based SPI driver"
+	depends on GENERIC_GPIO
+	select SPI_GPIO
+	help
+	  Used as inlined(fast) version of spi-gpio driver

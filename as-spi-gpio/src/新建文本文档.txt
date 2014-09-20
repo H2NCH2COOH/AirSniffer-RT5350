@@ -1,0 +1,2 @@
+modprobe as-spi-gpio
+modprobe as-spi-gpio-dev
