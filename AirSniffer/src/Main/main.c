@@ -55,6 +55,19 @@
 
 #define DATA_AVE_NUMBER 10
 #define DATA_SEND_INTERVAL 10
+
+#define BATTERY_STATE_CHARGE    (1<<0)
+#define BATTERY_STATE_LOW       (1<<1)
+#define BATTERY_STATE_FULL      (1<<2)
+
+#define DISPLAY_TYPE_PLEASE_WAIT    1
+#define DISPLAY_TYPE_DATA_BG        2
+#define DISPLAY_TYPE_DATA           3
+#define DISPLAY_TYPE_PLEASE_SETUP   4
+#define DISPLAY_TYPE_SETUP_SUCC     5
+#define DISPLAY_TYPE_SETUP_FAIL     6
+#define DISPLAY_TYPE_BATTERY        7
+#define DISPLAY_TYPE_WIFI_CONN      8
 /*---------------------------------------------------------------------------*
  * Globals
  *---------------------------------------------------------------------------*/
@@ -75,9 +88,6 @@ static int net_pong=0;
 static int wifi_setup_flag=0;
 
 static int battery_state=0;
-#define BATTERY_STATE_CHARGE    (1<<0)
-#define BATTERY_STATE_LOW       (1<<1)
-#define BATTERY_STATE_FULL      (1<<2)
 
 static int count=0;
 static int sensor_low=0;
@@ -101,6 +111,7 @@ static const char* ID_PM25="PM25";
 static void main_sigalrm_handler(int signal);
 static int wifi_setup();
 static double data_convert(double raw);
+static void display(int type,int data);
 
 /*---------------------------------------------------------------------------*
  * set_sigio_handler
@@ -396,25 +407,28 @@ struct gpio_reg
 {
     int pin;
     int level;
+    int interval;
     int cooldown;
     struct gpio_reg* next;
 };
-struct gpio_reg* gpio_to_poll=NULL;
+static struct gpio_reg* gpio_to_poll=NULL;
 
-static void add_gpio(int p)
+static void add_gpio(int p,int interval)
 {
     struct gpio_reg* temp;
     
     temp=(struct gpio_reg*)malloc(sizeof(struct gpio_reg));
     temp->pin=p;
-    temp->level=1;
+    temp->level=-1;
+    temp->interval=interval;
+    temp->cooldown=0;
     temp->next=gpio_to_poll;
     gpio_to_poll=temp;
 }
 
 static void poll_gpio()
 {
-    static char buf[128];
+    //static char buf[128];
     
     struct gpio_reg* temp;
     int i;
@@ -430,17 +444,37 @@ static void poll_gpio()
         else
         {
             i=gpio_get_value(temp->pin);
+            
+            if(temp->interval>0)
+            {
+                temp->cooldown=temp->interval;
+            }
+            
             if(temp->level!=i)
             {
                 temp->level=i;
-                temp->cooldown=GPIO_EVENT_COOLDOWN;
+                
+                if(temp->cooldown==0)
+                {
+                    temp->cooldown=GPIO_EVENT_COOLDOWN;
+                }
             
                 //sprintf(buf,"%d,%d",temp->pin,i);
-                printf("[AirSniffer][Main]GPIO event: pin%d->%d",temp->pin,i);
+                printf("[AirSniffer][Main]GPIO event: pin%d->%d\n",temp->pin,i);
                 //send_to_main(CMD_GPIO_EVENT,buf);
                 
                 switch(temp->pin)
                 {
+                    case GPIO_PIN_BAT_FULL:
+                        if(temp->level==0)
+                        {
+                            battery_state|=BATTERY_STATE_FULL;
+                        }
+                        else
+                        {
+                            battery_state&=~BATTERY_STATE_FULL;
+                        }
+                        break;
                     case GPIO_PIN_BAT_CHARGE:
                         if(temp->level==0)
                         {
@@ -547,9 +581,9 @@ static void main_sigalrm_handler(int signal)
     ++count;
     if(count>=SENSOR_CALC_INTERVAL)
     {
-        count=0;
+        raw=(double)sensor_low/count;
         
-        raw=(double)sensor_low/SENSOR_CALC_INTERVAL;
+        count=0;
         sensor_low=0;
         
         //sprintf(buf,"%f",raw);
@@ -574,12 +608,33 @@ static int wifi_setup()
     int fd,ret=0;
     struct pollfd pfd[1];
     char buff[64];
+    char id[128];
+    FILE* file;
     
     wifi_setup_flag=1;
     
     printf("[AirSniffer][Main]Start wifi setup\n");
     
-    //DISPLAY: please wait
+    display(DISPLAY_TYPE_PLEASE_WAIT,0);
+    
+    system("ifconfig br-lan down");
+    
+    //Write config file for hostapd
+    get_config(CONFIG_KEY_DEVICE_ID,id);
+    file=fopen(HOSTAPD_CONFIG_FILE,"w");
+    fprintf(file,"interface=" STA_DEV "\n"); //Auto concat
+    fprintf(file,"driver=nl80211\n");
+    fprintf(file,"ssid=AirSniffer_%s\n",id);
+    fprintf(file,"channel=0\n");
+    fprintf(file,"hw_mode=g\n");
+    fprintf(file,"ignore_broadcast_ssid=0\n");
+    fprintf(file,"auth_algs=3\n");
+    fprintf(file,"wpa=3\n");
+    fprintf(file,"wpa_passphrase=12345678\n"); //Maybe should change from time to time
+    fprintf(file,"wpa_key_mgmt=WPA-PSK\n");
+    fprintf(file,"wpa_pairwise=CCMP\n");
+    fprintf(file,"rsn_pairwise=CCMP\n");
+    fclose(file);
     
     /*if(system("ifconfig " AP_DEV " up > /dev/null")!=0) //Auto concat
     {
@@ -594,10 +649,9 @@ static int wifi_setup()
     system("hostapd -B " HOSTAPD_CONFIG_FILE); //Auto concat
     system("ifconfig " STA_DEV " 192.168.1.1"); //Auto concat
     system("udhcpd " DHCPD_CONFIG); //Auto concat
-    
     //Assume httpd is working
     
-    //DISPLAY: please setup
+    display(DISPLAY_TYPE_PLEASE_SETUP,0);
     
     printf("[AirSniffer][Main]AP ready\n");
     
@@ -607,7 +661,7 @@ static int wifi_setup()
         if(mkfifo(SIGNAL_FIFO,0666)!=0)
         {
             fprintf(stderr,"[AirSniffer][Main]Can't make FIFO when starting wifi setup\n\t%s\n",strerror(errno));
-            ret=-1;
+            ret=-4;
             goto exit;
         }
     }
@@ -617,9 +671,8 @@ static int wifi_setup()
     if(fcntl(fd,F_SETFL,0)<0)
     {
         fprintf(stderr,"[AirSniffer][Main]fcntl() error\n\t%s\n",strerror(errno));
-        ret=-1;
-        close(fd);
-        goto exit;
+        ret=-3;
+        goto exit_close_fd;
     }
     
     fd_set set;
@@ -633,9 +686,8 @@ static int wifi_setup()
     if(select(fd+1,&set,NULL,NULL,&to)<=0)
     {
         fprintf(stderr,"[AirSniffer][Main]Select time out\n");
-        ret=-1;
-        close(fd);
-        goto exit;
+        ret=-2;
+        goto exit_close_fd;
     }
     
     //Read FIFO
@@ -644,6 +696,7 @@ static int wifi_setup()
     printf("[AirSniffer][Main]WiFi setup info received: %s\n",buff);
     
     system("killall hostapd");
+    system("killall udhcpd");
     system("wpa_supplicant -B -i " STA_DEV " -c " WPA_CONFIG); //Auto concat
     //Call wifi_setup_agent
     if(system(buff)!=0)
@@ -651,7 +704,7 @@ static int wifi_setup()
         //Setup fail
         fprintf(stderr,"[AirSniffer][Main]wifi_setup_agent error\n");
         
-        //DISPLAY: setup fail
+        display(DISPLAY_TYPE_SETUP_FAIL,0);
         
         ret=-1;
     }
@@ -661,7 +714,7 @@ static int wifi_setup()
         printf("[AirSniffer][Main]WiFi setup success\n");
         system("udhcpc -i " STA_DEV " -s /etc/udhcpc.script");
         
-        //DISPLAY: setup success
+        display(DISPLAY_TYPE_SETUP_SUCC,0);
         
         ret=0;
     }
@@ -670,12 +723,17 @@ static int wifi_setup()
     close(fd);
     
     sleep(5);
-    
+    goto succ;
+
+exit_close_fd:
+    close(fd);
 exit:
     system("killall hostapd");
     system("killall udhcpd");
+    system("wpa_supplicant -B -i " STA_DEV " -c " WPA_CONFIG); //Auto concat
+
     //system("ifconfig " AP_DEV " down"); //Auto concat
-    
+succ:
     wifi_setup_flag=0;
     
     return ret;
@@ -686,7 +744,7 @@ exit:
 static double data_convert(double raw)
 {
     double ret;
-    ret=raw*400;
+    ret=raw*60000;
     return ret;
 }
 /*---------------------------------------------------------------------------*
@@ -722,13 +780,51 @@ static void start_timer(struct itimerval *itv)
  *---------------------------------------------------------------------------*/
 static void display(int type,int data)
 {
+    static int current_is_data=0;
+    
     struct itimerval itv;
     
     stop_timer(&itv);
     
     switch(type)
     {
-        case 
+        case DISPLAY_TYPE_PLEASE_WAIT:
+            current_is_data=0;
+            display_screen(0);
+            break;
+        case DISPLAY_TYPE_DATA_BG:
+            break;
+        case DISPLAY_TYPE_DATA:
+            if(!current_is_data)
+            {
+                display_screen(1);
+                //usleep(1000);
+                //show_unit();
+                //usleep(1000);
+                current_is_data=1;
+            }
+            display_data(data);
+            break;
+        case DISPLAY_TYPE_PLEASE_SETUP:
+            current_is_data=0;
+            display_screen(2);
+            break;
+        case DISPLAY_TYPE_SETUP_SUCC:
+            current_is_data=0;
+            display_screen(3);
+            break;
+        case DISPLAY_TYPE_SETUP_FAIL:
+            current_is_data=0;
+            display_screen(4);
+            break;
+        case DISPLAY_TYPE_BATTERY:
+            display_battery((char)data);
+            break;
+        case DISPLAY_TYPE_WIFI_CONN:
+            display_net_conn(data);
+            break;
+        default:
+            break;
     }
     
     start_timer(&itv);
@@ -745,8 +841,8 @@ static void gpio_init()
     gpio_direction_input(GPIO_PIN_SENSOR2);
     
     //LCD A0
-    gpio_request(GPIO_PIN_LED_A0,NULL);
-    gpio_direction_output(GPIO_PIN_LED_A0,0);
+    //gpio_request(GPIO_PIN_LED_A0,NULL);
+    //gpio_direction_output(GPIO_PIN_LED_A0,0);
     
     //Battery
     gpio_request(GPIO_PIN_BAT_CHARGE,NULL);
@@ -759,6 +855,12 @@ static void gpio_init()
     //Back button
     gpio_request(GPIO_PIN_BACK_BUTTON,NULL);
     gpio_direction_input(GPIO_PIN_BACK_BUTTON);
+    
+    add_gpio(GPIO_PIN_BAT_CHARGE,SENSOR_CALC_INTERVAL);
+    add_gpio(GPIO_PIN_BAT_LOW,SENSOR_CALC_INTERVAL);
+    add_gpio(GPIO_PIN_BAT_FULL,SENSOR_CALC_INTERVAL);
+    
+    add_gpio(GPIO_PIN_BACK_BUTTON,10);
 }
 /*---------------------------------------------------------------------------*
  * Main
@@ -784,6 +886,24 @@ int main(int argc,char* argv[])
     int old_battery_state;
     struct data_points* data;
     
+    /*switch(argv[1][0])
+    {
+        case 'i':
+            LCD_Init();
+            break;
+        case 'w':
+            display_screen(0);
+            break;
+        case 'd':
+            display_data(123);
+            break;
+        case 's':
+            display_screen(1);
+            show_unit();
+            break;
+    }
+    return;*/
+    
     printf("[AirSniffer][Main]Start\n");
     
     //Don't panic, for now
@@ -808,10 +928,14 @@ int main(int argc,char* argv[])
         goto panic;
     }
     
+    printf("[AirSniffer][Main]modprobe success, spi-gpio driver&device installed\n");
+    
     //init display
     display_init();
+    printf("[AirSniffer][Main]LCD init finished\n");
     
     display_welcome();
+    sleep(2);
     
     //Set SIGALRM handler
     act.sa_handler=main_sigalrm_handler;
@@ -834,22 +958,6 @@ int main(int argc,char* argv[])
         get_config(CONFIG_KEY_DEVICE_ID,id);
         get_config(CONFIG_KEY_ACTIVATION_CODE,activation_code);
         free_config();
-        
-        //Write config file for hostapd
-        file=fopen(HOSTAPD_CONFIG_FILE,"w");
-        fprintf(file,"interface=" STA_DEV "\n"); //Auto concat
-        fprintf(file,"driver=nl80211\n");
-        fprintf(file,"ssid=AirSniffer_%s\n",id);
-        fprintf(file,"channel=0\n");
-        fprintf(file,"hw_mode=g\n");
-        fprintf(file,"ignore_broadcast_ssid=0\n");
-        fprintf(file,"auth_algs=3\n");
-        fprintf(file,"wpa=3\n");
-        fprintf(file,"wpa_passphrase=12345678\n"); //Maybe should change from device to device
-        fprintf(file,"wpa_key_mgmt=WPA-PSK\n");
-        fprintf(file,"wpa_pairwise=CCMP\n");
-        fprintf(file,"rsn_pairwise=CCMP\n");
-        fclose(file);
         
         //Wifi setup
         if(wifi_setup()<0)
@@ -890,7 +998,7 @@ int main(int argc,char* argv[])
     //Start first ping alram
     //alarm(5);
     
-    //DISPLAY: please wait
+    display(DISPLAY_TYPE_PLEASE_WAIT,0);
     
     //Start timer
     start_timer(NULL);
@@ -909,7 +1017,7 @@ int main(int argc,char* argv[])
             
             wifi_setup();
             
-            //DISPLAY: please wait
+            display(DISPLAY_TYPE_PLEASE_WAIT,0);
             
             //Restart timer
             start_timer(NULL);
@@ -919,15 +1027,19 @@ int main(int argc,char* argv[])
         {
             if(battery_state==0)
             {
-                //DISPLAY: battery clear
+                display(DISPLAY_TYPE_BATTERY,'n');
+            }
+            else if(battery_state&BATTERY_STATE_FULL)
+            {
+                display(DISPLAY_TYPE_BATTERY,'f');
             }
             else if(battery_state&BATTERY_STATE_CHARGE)
             {
-                //DISPLAY: battery charging
+                display(DISPLAY_TYPE_BATTERY,'c');
             }
             else if(battery_state&BATTERY_STATE_LOW)
             {
-                //DISPLAY: battery low
+                display(DISPLAY_TYPE_BATTERY,'l');
             }
             
             old_battery_state=battery_state;
@@ -948,57 +1060,65 @@ int main(int argc,char* argv[])
                 new_data_ptr=sensor_data;
             }
             
-            raw=0;
-            for(i=0;i<current_data_number;++i)
+            if(!wifi_setup_flag)
             {
-                raw+=sensor_data[i];
-            }
-            raw/=current_data_number;
-            converted=data_convert(raw);
-            
-            //DISPLAY: new data
-            
-            if(++data_send_counter>=DATA_SEND_INTERVAL)
-            {
-                data_send_counter=0;
-                
-                //buf[0]=CMD_NEW_DATA;
-                //sprintf(buf+1,"%10f,%10f",raw,converted);
-                //write(pipe_to_net,buf,2+strlen(buf+1));
-                
-                sprintf(buf,"%10f",raw);
-                data=append_data_point(NULL,ID_RAW_DATA,buf);
-                sprintf(buf,"%10d",(int)converted);
-                data=append_data_point(data,ID_PM25,buf);
-                
-                get_config(CONFIG_KEY_FEED_ID,feed_id);
-                get_config(CONFIG_KEY_API_KEY,api_key);
-                
-                //Stop timer
-                stop_timer(NULL);
-                
-                if(update_feed(feed_id,api_key,data)<0)
+                raw=0;
+                for(i=0;i<current_data_number;++i)
                 {
-                    //Update failed
-                    //Send disconnected CMD
-                    //c=CMD_DISCONNECTED;
-                    //write(pipe_to_sensor,&c,1);
-                    printf("[AirSniffer][Main]Disconnected\n");
+                    raw+=sensor_data[i];
                 }
-                else
-                {
-                    printf("[AirSniffer][Main]New data sent\n");
-                    //Send connected CMD
-                    //c=CMD_CONNECTED;
-                    //write(pipe_to_sensor,&c,1);
-                    printf("[AirSniffer][Main]Connected\n");
-                }
-                free_data_points(data);
+                raw/=current_data_number;
+                converted=data_convert(raw);
                 
-                //Restart timer
-                start_timer(NULL);
+                display(DISPLAY_TYPE_DATA,(int)converted);
+                
+                if(++data_send_counter>=DATA_SEND_INTERVAL)
+                {
+                    data_send_counter=0;
+                    
+                    printf("[AirSniffer][Main]Sending new data\n");
+                    
+                    //buf[0]=CMD_NEW_DATA;
+                    //sprintf(buf+1,"%10f,%10f",raw,converted);
+                    //write(pipe_to_net,buf,2+strlen(buf+1));
+                    
+                    sprintf(buf,"%10f",raw);
+                    data=append_data_point(NULL,ID_RAW_DATA,buf);
+                    sprintf(buf,"%10d",(int)converted);
+                    data=append_data_point(data,ID_PM25,buf);
+                    
+                    get_config(CONFIG_KEY_FEED_ID,feed_id);
+                    get_config(CONFIG_KEY_API_KEY,api_key);
+                    
+                    //Stop timer
+                    stop_timer(NULL);
+                    
+                    if(update_feed(feed_id,api_key,data)<0)
+                    {
+                        //Update failed
+                        /*Send disconnected CMD
+                        c=CMD_DISCONNECTED;
+                        write(pipe_to_sensor,&c,1);*/
+                        printf("[AirSniffer][Main]Disconnected\n");
+                        display(DISPLAY_TYPE_WIFI_CONN,0);
+                    }
+                    else
+                    {
+                        printf("[AirSniffer][Main]New data sent\n");
+                        /*Send connected CMD
+                        c=CMD_CONNECTED;
+                        write(pipe_to_sensor,&c,1);*/
+                        printf("[AirSniffer][Main]Connected\n");
+                        display(DISPLAY_TYPE_WIFI_CONN,1);
+                    }
+                    free_data_points(data);
+                    
+                    //Restart timer
+                    start_timer(NULL);
+                }
             }
         }
+        pause();
     }
     
 panic:
@@ -1015,6 +1135,7 @@ panic:
     printf("[AirSniffer][Main]Exit\n");
     
     //DISPLAY: panic screen
+    LCD_Clear(BLACK);
     
     return -1; //Panic & Exit
 }

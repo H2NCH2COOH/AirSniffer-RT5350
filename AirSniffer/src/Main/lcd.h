@@ -8,13 +8,6 @@
 #define u16 unsigned int
 #define u32 unsigned long
 
-//IO连接  
-#define LCD_AO   10 	    //数据/命令切换		1 data, 0 command		
-#define LCD_SDA  9 	    //数据										
-#define LCD_SCK  8     //时钟	
-
-
-
 typedef struct RegParameters{
 	unsigned int offset;
 	unsigned int len;
@@ -58,23 +51,21 @@ void LCD_DrawRectangle(u16 x1, u16 y1, u16 x2, u16 y2);
 void LCD_Fill(u8 xsta,u8 ysta,u8 xend,u8 yend,u16 color);
 
 
-void LCD_ShowImageRaw(u8 xsta, u8 ysta, u8 xlen, u8 ylen, u8 *image);
+void LCD_ShowImageRaw(u8 xsta, u8 ysta, u8 xlen, u8 ylen, const u8 *image);
 
 void display_battery(char state);
 void display_nums(int num);
-void showunit();
+void show_unit();
 void display_net_conn(int wifion);
-void displayscreenraw(int k, int modeupdown);
 void display_welcome();
-void displayscreen(int k);
+void display_screen(int k);
 void display_init();
-void diaplay_data(int num);
-void display_data_init(int num);
+void display_data(int num);
 
 //画笔颜色
 #define WHITE         	 0xFFFF
-#define BLACK         	 0x0000	  
-#define BLUE         	 0x001F  
+#define BLACK         	 0x0000
+#define BLUE         	 0x001F
 #define BRED             0XF81F
 #define GRED 			 0XFFE0
 #define GBLUE			 0X07FF

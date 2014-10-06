@@ -7,10 +7,10 @@
 #define LCD_H 128
 #define BPP 2 // byte per pixel
 
-#define NMAXBIT 2   // begin at bit 0, right to left
-#define NUMWIDTH 32
+#define NMAXBIT 5   // begin at bit 0, right to left
+#define NUMWIDTH 26
 #define NUMHEIGHT 50
-#define NXSTA (15+NMAXBIT*NUMWIDTH)
+#define NXSTA (15+(NMAXBIT-1)*NUMWIDTH)
 #define NYSTA 20
 #define NUMOFNUM 11 //0-9, and backcolor
 
@@ -33,7 +33,7 @@
 
 // config for display_screen
 #define MODEDIVUPDOWN 1
-#define DIVSIZE 1
+#define DIVSIZE 5
 
 #define DIVUPPERWIDTH LCD_W
 #define DIVUPPERHEIGHT (LCD_H-CHARGEHEIGHT)
@@ -63,14 +63,11 @@
 
 extern const unsigned char gImage_numchars[NUMOFNUM][BPP*NUMWIDTH*NUMHEIGHT];
 extern const unsigned char gImage_boot[40960];
-extern const unsigned char gImage_battery[2][BPP*CHARGEWIDTH*CHARGEHEIGHT];
+extern const unsigned char gImage_battery[4][BPP*CHARGEWIDTH*CHARGEHEIGHT];
 extern const unsigned char gImage_unit[BPP*UNITWIDTH*UNITHEIGHT];
 extern const unsigned char gImage_net30[2][1800];
-extern const unsigned char gImage_net30_on_2[2280];
 extern const unsigned char gImage_div_upper[DIVSIZE][BPP*DIVUPPERWIDTH*DIVUPPERHEIGHT];
 extern const unsigned char gImage_div_lower[DIVSIZE][BPP*DIVLOWERWIDTH*DIVLOWERHEIGHT];
-extern const unsigned char gImage_div_left[DIVSIZE][BPP*DIVLEFTWIDTH*DIVLEFTHEIGHT];
-extern const unsigned char gImage_div_right[DIVSIZE][BPP*DIVRIGHTWIDTH*DIVRIGHTHEIGHT];
 
 #endif  
 	 

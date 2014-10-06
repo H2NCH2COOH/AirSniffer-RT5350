@@ -5,9 +5,11 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <string.h>
-#include <ugpio/ugpio.h>
+//#include <ugpio/ugpio.h>
 #include "lcd.h"
 #include "datalcd.h"
+
+#include "gpio_pin.h"
 
 #define DEVPATH "/dev/spidev25.0"
 
@@ -37,12 +39,12 @@ const u8 InitData[]={
 u16 BACK_COLOR=WHITE;    //背景色
 u16 POINT_COLOR=BLACK;   //画笔色	 
  
-static void uwrite(void * buf, size_t nbyte) {
+static void uwrite(const void * buf, size_t nbyte) {
 	if(buf==NULL || nbyte==0)
 		return;
 	int fd;
 	if((fd=open(DEVPATH,O_WRONLY))<0) {
-		fprintf(stderr,"error.\n");
+		fprintf(stderr,"[LCD]Can't open dev file: " DEVPATH "\n\tFatal Error Exit\n");
 		exit(1);
 	}
 	write(fd,buf,nbyte);
@@ -57,9 +59,9 @@ void LCD_WR_DATA_FOR_REG_INIT(RegParaPos pos)
 void LCD_WR_REG(u8 da)	 
 {
 	
-    gpio_set_value(LCD_AO,0);
+    gpio_set_value(GPIO_PIN_LED_A0,0);
 	uwrite(&da,1);
-	gpio_set_value(LCD_AO,1);
+	gpio_set_value(GPIO_PIN_LED_A0,1);
 }
 
 void LCD_WR16(u16 da)
@@ -79,7 +81,7 @@ void Address_set(u8 xsta,u8 ysta,u8 xend,u8 yend)
 		u8 startlow;
 		u8 endhigh;
 		u8 endlow
-	}address={0,0,0,0};
+	} address={0,0,0,0};
 	address.startlow=xsta;
 	address.endlow=xend;
 	LCD_WR_REG(0x2a);
@@ -98,11 +100,19 @@ void Address_set(u8 xsta,u8 ysta,u8 xend,u8 yend)
 void LCD_Init(void)
 {
 
-	gpio_request(LCD_AO, "lcd");
-	gpio_direction_output(LCD_AO,1);
-	
+	gpio_request(GPIO_PIN_LED_A0,NULL);
+	gpio_direction_output(GPIO_PIN_LED_A0,1);
+    
+    gpio_request(GPIO_PIN_LED_RESET,NULL);
+	gpio_direction_output(GPIO_PIN_LED_RESET,1);
+    
+	gpio_set_value(GPIO_PIN_LED_RESET,0);
+    usleep(1000);
+    gpio_set_value(GPIO_PIN_LED_RESET,1);
+    usleep(1000);
+    
    	LCD_WR_REG(0x11); //Sleep out
-	usleep(2000); //Delay 
+	usleep(2000); //Delay
 	//------------------------------------ST7735S Frame Rate-----------------------------------------//
 	LCD_WR_REG(0xB1);
 	LCD_WR_DATA_FOR_REG_INIT(POS_B1);
@@ -163,9 +173,9 @@ void LCD_DrawPoint_big(u16 x,u16 y)
 {
 	LCD_Fill(x-1,y-1,x+1,y+1,POINT_COLOR);
 } 
-static void LCD_BlockWrite(u8 *buffer, size_t nbyte)
+static void LCD_BlockWrite(const u8 *buffer, size_t nbyte)
 {
-	u8 *ptr=buffer+nbyte-900;
+	const u8 *ptr=buffer+nbyte-900;
 	for(;buffer<ptr;buffer+=900)
 	{
 		uwrite(buffer,900);
@@ -197,12 +207,15 @@ void LCD_Fill(u8 xsta,u8 ysta,u8 xend,u8 yend,u16 color)
 	Address_set(xsta,ysta,xend,yend);
 	
 	buffer = (u8 *) malloc (nbyte);
-	if (buffer==NULL) exit (1);
+	if (buffer==NULL) {
+        fprintf(stderr,"[LCD]Failed malloc buffer of size %ld\n\tFatal Error Exit\n",nbyte);
+        exit(1);
+    }
 	LCD_Set_Color_For_Fill(buffer,nbyte,color);
 	LCD_BlockWrite(buffer,nbyte);
 	free(buffer);
 }
-void LCD_ShowImageRaw(u8 xsta, u8 ysta, u8 xlen, u8 ylen, u8 *image)
+void LCD_ShowImageRaw(u8 xsta, u8 ysta, u8 xlen, u8 ylen, const u8 *image)
 {
 	// check validation, to be fulfilled
 	// flow control
@@ -210,8 +223,10 @@ void LCD_ShowImageRaw(u8 xsta, u8 ysta, u8 xlen, u8 ylen, u8 *image)
 	// for security, don't write too much one time
 	// might need return errno
 	u8 xend=xsta+xlen-1, yend=ysta+ylen-1;
-	if(xend>LCD_W-1 || yend>LCD_H-1 || image==NULL)
-		exit(0);
+	if(xend>LCD_W-1 || yend>LCD_H-1 || image==NULL) {
+        fprintf(stderr,"[LCD]LCD_ShowImageRaw(): Illegal arg(s), return\n");
+        return;
+    }
 	size_t nbyte=BPP*xlen*ylen;
 	Address_set(xsta,ysta,xend,yend);
 	LCD_BlockWrite(image,nbyte);
@@ -294,7 +309,7 @@ void Draw_Circle(u16 x0,u16 y0,u8 r)
 
 
 
-void showunit() {
+void show_unit() {
 	LCD_ShowImageRaw(UXSTA,UYSTA,UNITWIDTH,UNITHEIGHT,gImage_unit);
 }
 
@@ -303,36 +318,59 @@ void display_welcome() {
 }
 
 void display_battery(char state) {
-	int i=(state=='l') ? 0 : 1;
-	u8 *ptr = gImage_battery[i];
-	LCD_ShowImageRaw(LCD_W-CHARGEWIDTH,LCD_H-CHARGEHEIGHT,CHARGEWIDTH,CHARGEHEIGHT,ptr);
+	const u8 *ptr;
+    int i;
+    switch(state) {
+        case 'f':
+            i=0;
+            break;
+        case 'l':
+            i=1;
+            break;
+        case 'c':
+            i=2;
+            break;
+        case 'n':
+            i=3;
+            break;
+    }
+    
+    ptr=gImage_battery[i];
+    LCD_ShowImageRaw(LCD_W-CHARGEWIDTH,LCD_H-CHARGEHEIGHT,CHARGEWIDTH,CHARGEHEIGHT,ptr);
 }
 
 static void shownumRaw(int num,int bit) {
-	if(num<0 || num>10 || bit<0 || bit>NMAXBIT)
-		exit(0);
+	if(num<0 || num>10 || bit<0 || bit>=NMAXBIT) {
+        fprintf(stderr,"[LCD]shownumRaw(): Illegal arg(s), return\n");
+        return;
+    }
 	LCD_ShowImageRaw(NXSTA-bit*NUMWIDTH, NYSTA, NUMWIDTH, NUMHEIGHT, gImage_numchars[num]);
 }
 
 void display_nums(int num) {
-	int bit, token=1, nlist[3];
-	for(bit=0;bit<=NMAXBIT;bit++) {
+	int bit, token=0, nlist[3];
+    
+    if(num>=100000)
+    {
+        num=99999;
+    }
+    else if(num<0)
+    {
+        num=0;
+    }
+    
+	for(bit=0;bit<NMAXBIT;bit++) {
 		nlist[bit]=num%10;
 		num/=10;
 	}
-	for(bit=NMAXBIT;bit>=0;bit--) {
-		if(token) {
-			if(nlist[bit]) {
-				token=0;
-				shownumRaw(nlist[bit],bit);
-			}
-			else {
-				shownumRaw(10,bit);
-			}
-		}
-		else {
-			shownumRaw(nlist[bit],bit);
-		}
+	for(bit=NMAXBIT-1;bit>=0;bit--) {
+        if(nlist[bit]||token||bit==0) {
+            token=1;
+            shownumRaw(nlist[bit],bit);
+        }
+        else {
+            shownumRaw(10,bit);
+        }
 	}
 }
 
@@ -341,40 +379,33 @@ void display_net_conn(int wifion) {
 }
 
 
-static void displayscreenraw(int k, int modeupdown)
+static void display_screenraw(int k, int modeupdown)
 {
-	u8 *ptr1, *ptr2;
+	const u8 *ptr1, *ptr2;
 	if(modeupdown) {
 		ptr1=gImage_div_upper[k];
 		ptr2=gImage_div_lower[k];
 	}
 	else {
-		ptr1=gImage_div_left[k];
-		ptr2=gImage_div_right[k];
+		//ptr1=gImage_div_left[k];
+		//ptr2=gImage_div_right[k];
 	}
 	
 	LCD_ShowImageRaw(0,0,DIVWIDTH_1,DIVHEIGHT_1,ptr1);
 	LCD_ShowImageRaw(DIV2XSTA,DIV2YSTA,DIVWIDTH_2,DIVHEIGHT_2,ptr2);
 }
-void displayscreen(int k)
+void display_screen(int k)
 {
-	displayscreenraw(k, MODEDIVUPDOWN);
+	display_screenraw(k, MODEDIVUPDOWN);
 }
 
 
 void display_init()
 {
 	LCD_Init();
-	LCD_Clear(BACK_COLOR);
 }
 
-void diaplay_data(int num)
+void display_data(int num)
 {
 	display_nums(num);
 }
-void display_data_init(int num)
-{
-	display_nums(num);
-	showunit();
-}
-

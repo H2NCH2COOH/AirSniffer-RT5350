@@ -28,6 +28,10 @@ define Package/$(PKG_NAME)/install
 	#Device.id
 	$(INSTALL_DIR) $(1)/etc/config
 	$(INSTALL_BIN) ./files/device.id $(1)/etc/config/
+    
+    #Device.conf
+	$(INSTALL_DIR) $(1)/etc/config
+	$(INSTALL_BIN) ./files/device.conf $(1)/etc/config/
 	
 	#Main
 	$(INSTALL_DIR) $(1)/usr/bin
