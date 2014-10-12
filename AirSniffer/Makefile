@@ -45,6 +45,7 @@ define Package/$(PKG_NAME)/install
 	
 	$(INSTALL_DIR) $(1)/etc/config
 	$(INSTALL_BIN) ./files/Main/dhcpd.conf $(1)/etc/config/
+	$(INSTALL_BIN) ./files/Main/network $(1)/etc/config/
 	
 	#CGI
 	$(INSTALL_DIR) $(1)/usr/bin

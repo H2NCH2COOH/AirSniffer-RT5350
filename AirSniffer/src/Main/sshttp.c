@@ -47,6 +47,8 @@ int sshttp_request
     const char* s;
     struct pollfd pfd;
 	
+    errno=0;
+    
     /*-----open socket-----*/
 	if(getaddrinfo(host,"http",NULL,&ai)!=0)
 	{

@@ -30,6 +30,11 @@
 /*---------------------------------------------------------------------------*
  * Configs
  *---------------------------------------------------------------------------*/
+//#define USE_WATCHDOG
+#ifdef USE_WATCHDOG
+    #define WATCHDOG_DEV "/dev/watchdog"
+#endif
+
 #define PING_INTERVAL 120
 
 #define ID_FILE "/etc/config/device.id"
@@ -73,6 +78,11 @@
  *---------------------------------------------------------------------------*/
 static int _panic_=0;
 
+#ifdef USE_WATCHDOG
+    static int watchdog;
+    #define feed_dog() write(watchdog,"f",1)
+#endif
+
 static pid_t pid_of_sensor=0;
 static int pipe_to_sensor=0;
 static int pipe_from_sensor=0;
@@ -101,6 +111,7 @@ static int data_send_counter=0;
 static const char* ID_RAW_DATA="raw_data";
 static const char* ID_PM25="PM25";
 
+static int debug;
 /*---------------------------------------------------------------------------*
  * Prototypes
  *---------------------------------------------------------------------------*/
@@ -111,6 +122,8 @@ static const char* ID_PM25="PM25";
 static void main_sigalrm_handler(int signal);
 static int wifi_setup();
 static double data_convert(double raw);
+static void stop_timer(struct itimerval *old);
+static void start_timer(struct itimerval *itv);
 static void display(int type,int data);
 
 /*---------------------------------------------------------------------------*
@@ -571,16 +584,26 @@ static void main_sigalrm_handler(int signal)
             break;
     }*/
     
+    static int cc=0;
     double raw;
+    
+    debug=0;
     
     if(gpio_get_value(GPIO_PIN_SENSOR)==0)
     {
         ++sensor_low;
     }
     
+    debug=1;
+    
     ++count;
+    
+    debug=2;
+    
     if(count>=SENSOR_CALC_INTERVAL)
     {
+        debug=3;
+        
         raw=(double)sensor_low/count;
         
         count=0;
@@ -593,11 +616,17 @@ static void main_sigalrm_handler(int signal)
         printf("[AirSniffer][Main]New raw data: %f\n",raw);
         *new_data_ptr=raw;
         new_data=1;
-        
-        //system("cat /proc/uptime");
     }
     
+    debug=4;
     poll_gpio();
+    debug=5;
+    
+    if(++cc>=2000)
+    {
+        printf("|\n");
+        cc=0;
+    }
 }
 
 /*---------------------------------------------------------------------------*
@@ -616,8 +645,6 @@ static int wifi_setup()
     printf("[AirSniffer][Main]Start wifi setup\n");
     
     display(DISPLAY_TYPE_PLEASE_WAIT,0);
-    
-    system("ifconfig br-lan down");
     
     //Write config file for hostapd
     get_config(CONFIG_KEY_DEVICE_ID,id);
@@ -654,6 +681,13 @@ static int wifi_setup()
     display(DISPLAY_TYPE_PLEASE_SETUP,0);
     
     printf("[AirSniffer][Main]AP ready\n");
+    
+    #ifdef USE_WATCHDOG
+        write(watchdog,"V",1);
+        close(watchdog);
+        watchdog=0;
+    #endif
+    
     
     //Ceate FIFO for finishing signal
     if(access(SIGNAL_FIFO,F_OK)!=0)
@@ -734,6 +768,17 @@ exit:
 
     //system("ifconfig " AP_DEV " down"); //Auto concat
 succ:
+    #ifdef USE_WATCHDOG
+        watchdog=open(WATCHDOG_DEV,O_WRONLY);
+        if(watchdog<=0)
+        {
+            _panic_=1;
+            fprintf(stderr,"[AirSniffer][Main]Can't open watchdog\nPanic & Exit\n");
+            ret=-1;
+        }
+        feed_dog();
+    #endif
+    
     wifi_setup_flag=0;
     
     return ret;
@@ -863,6 +908,45 @@ static void gpio_init()
     add_gpio(GPIO_PIN_BACK_BUTTON,10);
 }
 /*---------------------------------------------------------------------------*
+ * SIGINT handler
+ *---------------------------------------------------------------------------*/
+void sigint_handler()
+{
+    struct itimerval itv;
+    
+    stop_timer(&itv);
+    
+    fprintf(stderr,"\nSIGINT!\ndebug=%d\n",debug);
+    
+    if
+    (
+        itv.it_interval.tv_sec>0||
+        itv.it_interval.tv_usec>0
+    )
+    {
+        fprintf(stderr,"interval>0\n");
+    }
+    else
+    {
+        fprintf(stderr,"interval==0\n");
+    }
+    
+    if
+    (
+        itv.it_value.tv_sec>0||
+        itv.it_value.tv_usec>0
+    )
+    {
+        fprintf(stderr,"itime>0\n");
+    }
+    else
+    {
+        fprintf(stderr,"itime==0\n");
+    }
+    
+    exit(1);
+}
+/*---------------------------------------------------------------------------*
  * Main
  *---------------------------------------------------------------------------*/
 int main(int argc,char* argv[])
@@ -885,6 +969,7 @@ int main(int argc,char* argv[])
     double converted;
     int old_battery_state;
     struct data_points* data;
+    struct itimerval itv;
     
     /*switch(argv[1][0])
     {
@@ -906,29 +991,25 @@ int main(int argc,char* argv[])
     
     printf("[AirSniffer][Main]Start\n");
     
+    #ifdef USE_WATCHDOG
+        watchdog=open(WATCHDOG_DEV,O_WRONLY);
+        if(watchdog<=0)
+        {
+            _panic_=1;
+            fprintf(stderr,"[AirSniffer][Main]Can't open watchdog\nPanic & Exit\n");
+            goto panic;
+        }
+        feed_dog();
+    #endif
+    
     //Don't panic, for now
     _panic_=0;
     
+    //Set SIGINT handler
+    signal(SIGINT,sigint_handler);
+    
     //Configure GPIOs
     gpio_init();
-    
-    //modprobe as-spi-gpio
-    if(system("modprobe as-spi-gpio")!=0)
-    {
-        _panic_=1;
-        fprintf(stderr,"[AirSniffer][Main]modprobe as-spi-gpio failed\nPanic & Exit\n");
-        goto panic;
-    }
-    
-    //modprobe as-spi-gpio-dev
-    if(system("modprobe as-spi-gpio-dev")!=0)
-    {
-        _panic_=1;
-        fprintf(stderr,"[AirSniffer][Main]modprobe as-spi-gpio-dev failed\nPanic & Exit\n");
-        goto panic;
-    }
-    
-    printf("[AirSniffer][Main]modprobe success, spi-gpio driver&device installed\n");
     
     //init display
     display_init();
@@ -1007,6 +1088,10 @@ int main(int argc,char* argv[])
     
     while(!_panic_)
     {
+        //feed_dog();
+        
+        debug%=100;
+        
         if(wifi_setup_flag)
         {
             //Stop timer
@@ -1025,6 +1110,8 @@ int main(int argc,char* argv[])
         
         if(old_battery_state!=battery_state)
         {
+            debug+=100;
+            
             if(battery_state==0)
             {
                 display(DISPLAY_TYPE_BATTERY,'n');
@@ -1047,7 +1134,13 @@ int main(int argc,char* argv[])
         
         if(new_data)
         {
+            debug+=200;
+            
             new_data=0;
+            
+            #ifdef USE_WATCHDOG
+                feed_dog();
+            #endif
             
             if(current_data_number<DATA_AVE_NUMBER)
             {
@@ -1093,6 +1186,8 @@ int main(int argc,char* argv[])
                     //Stop timer
                     stop_timer(NULL);
                     
+                    debug+=800;
+                    
                     if(update_feed(feed_id,api_key,data)<0)
                     {
                         //Update failed
@@ -1118,6 +1213,30 @@ int main(int argc,char* argv[])
                 }
             }
         }
+        
+        debug+=400;
+        
+        while(1)
+        {
+            getitimer(ITIMER_REAL,&itv);
+            
+            if
+            (
+                itv.it_interval.tv_sec==0&&
+                itv.it_interval.tv_usec==0&&
+                itv.it_value.tv_sec==0&&
+                itv.it_value.tv_usec==0
+            )
+            {
+                fprintf(stderr,"[AirSniffer][Main]timer==0, try to reset timer\n");
+                start_timer(NULL);
+            }
+            else
+            {
+                break;
+            }
+        }
+        
         pause();
     }
     
@@ -1129,13 +1248,13 @@ panic:
     free_config();
     
     //Kill children
-    kill(pid_of_sensor,SIGKILL);
-    kill(pid_of_net,SIGKILL);
+    //kill(pid_of_sensor,SIGKILL);
+    //kill(pid_of_net,SIGKILL);
     
     printf("[AirSniffer][Main]Exit\n");
     
     //DISPLAY: panic screen
-    LCD_Clear(BLACK);
+    //LCD_Clear(BLACK);
     
     return -1; //Panic & Exit
 }

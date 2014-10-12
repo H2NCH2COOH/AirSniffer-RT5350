@@ -16,12 +16,8 @@ start() {
     
     echo "[AirSniffer]Starting"
     
-    ifconfig br-lan 10.10.10.0
-    
-    ifconfig eth0 down
-    ifconfig eth0.1 down
-    ifconfig eth0.2 down
-    ifconfig br-lan down
+    modprobe as-spi-gpio
+    modprobe as-spi-gpio-dev
     
     ifconfig $STA_DEV up
     #iw phy $phy interfacce add $AP_DEV type managed
@@ -36,7 +32,7 @@ EOF
     
     wpa_supplicant -B -i $STA_DEV -c $WPA_CONFIG
     udhcpc -b -i $STA_DEV -s /etc/udhcpc.script
-    $APP &
+    #$APP &
 }
 
 stop() {
