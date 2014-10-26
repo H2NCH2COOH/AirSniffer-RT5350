@@ -47,7 +47,7 @@
 #define WPA_CTRL_PATH "/var/run/wpa_supplicant/wlan0"
 #define WPA_CONFIG "/etc/config/wpa_supplicant.conf"
 
-#define DHCPD_CONFIG "/etc/config/dhcp.conf"
+#define DHCPD_CONFIG "/etc/config/dhcpd.conf"
 
 #define WIFI_SETUP_TIMEOUT 300
 #define SIGNAL_FIFO "/tmp/assigfifo"
@@ -675,7 +675,16 @@ static int wifi_setup()
     
     system("hostapd -B " HOSTAPD_CONFIG_FILE); //Auto concat
     system("ifconfig " STA_DEV " 192.168.1.1"); //Auto concat
+    sleep(1);
     system("udhcpd " DHCPD_CONFIG); //Auto concat
+    
+    while(system("pgrep udhcpd")!=0)
+    {
+        fprintf(stderr,"[AirSniffer][Main][WiFi Setup]dhcpd didn't start, restart\n");
+        system("udhcpd " DHCPD_CONFIG); //Auto concat
+        sleep(1);
+    }
+    
     //Assume httpd is working
     
     display(DISPLAY_TYPE_PLEASE_SETUP,0);

@@ -8,6 +8,7 @@ PHY_DEV=phy0
 STA_DEV=wlan0
 #AP_DEV=wlan1
 
+DEV_CONFIG=/etc/config/device.conf
 WPA_CONFIG=/etc/config/wpa_supplicant.conf
 
 start() {
@@ -32,7 +33,15 @@ EOF
     
     wpa_supplicant -B -i $STA_DEV -c $WPA_CONFIG
     udhcpc -b -i $STA_DEV -s /etc/udhcpc.script
-    #$APP &
+    if [ -f $DEV_CONFIG ]; then
+        $APP &
+    else
+        echo "========================================================================="
+        echo "Please wait till init complete then press ENTER to start console"
+        echo "After console started, please run \"./dev_setup.sh\""
+        echo "and setup device configuration"
+        echo "========================================================================="
+    fi
 }
 
 stop() {
