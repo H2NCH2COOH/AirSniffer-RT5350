@@ -7,7 +7,7 @@
 #include <string.h>
 //#include <ugpio/ugpio.h>
 #include "lcd.h"
-#include "datalcd.h"
+#include "img.h"
 
 #include "gpio_pin.h"
 
@@ -17,7 +17,7 @@ RegParas InitDataPos[]={
 {0,3},{3,3},{6,6},{12,1},{13,3},{16,1},{17,2}, //
 {19,2},{21,2},{23,1},{24,1},{25,1},{26,1}
 };
-const u8 InitData[]={
+const uint8_t InitData[]={
 0x05,0x3c,0x3c, //0xb1
 0x05,0x3c,0x3c, //0xb2
 0x05,0x3c,0x3c,0x05,0x3c,0x3c, //0xb3
@@ -33,11 +33,8 @@ const u8 InitData[]={
 0x01, //0x35 TE ON Mode
 };
 
-
-
-
-u16 BACK_COLOR=WHITE;    //背景色
-u16 POINT_COLOR=BLACK;   //画笔色	 
+uint16_t BACK_COLOR=WHITE;    //背景色
+uint16_t POINT_COLOR=BLACK;   //画笔色
  
 static void uwrite(const void * buf, size_t nbyte) {
 	if(buf==NULL || nbyte==0)
@@ -50,13 +47,13 @@ static void uwrite(const void * buf, size_t nbyte) {
 	write(fd,buf,nbyte);
 	close(fd);
 }
-void LCD_WR_DATA_FOR_REG_INIT(RegParaPos pos)
+static void LCD_WR_DATA_FOR_REG_INIT(RegParaPos pos)
 {
 	
 	uwrite(InitData+InitDataPos[pos].offset,InitDataPos[pos].len);
 }
 
-void LCD_WR_REG(u8 da)	 
+static void LCD_WR_REG(uint8_t da)	 
 {
 	
     gpio_set_value(GPIO_PIN_LED_A0,0);
@@ -64,7 +61,7 @@ void LCD_WR_REG(u8 da)
 	gpio_set_value(GPIO_PIN_LED_A0,1);
 }
 
-void LCD_WR16(u16 da)
+static void LCD_WR16(uint16_t da)
 {
 	char tmp[2], *buf;
 	buf=(char* )&da;
@@ -74,13 +71,13 @@ void LCD_WR16(u16 da)
 }
 
 
-void Address_set(u8 xsta,u8 ysta,u8 xend,u8 yend)
+static void Address_set(uint8_t xsta,uint8_t ysta,uint8_t xend,uint8_t yend)
 {  
 	static struct NodeAddress {
-		u8 starthigh;
-		u8 startlow;
-		u8 endhigh;
-		u8 endlow
+		uint8_t starthigh;
+		uint8_t startlow;
+		uint8_t endhigh;
+		uint8_t endlow
 	} address={0,0,0,0};
 	address.startlow=xsta;
 	address.endlow=xend;
@@ -97,7 +94,7 @@ void Address_set(u8 xsta,u8 ysta,u8 xend,u8 yend)
 }
 
 
-void LCD_Init(void)
+static void LCD_Init(void)
 {
 
 	gpio_request(GPIO_PIN_LED_A0,NULL);
@@ -154,59 +151,62 @@ void LCD_Init(void)
 }
 //清屏函数
 //Color:要清屏的填充色
-void LCD_Clear(u16 Color)
+void LCD_Clear(uint16_t Color)
 {
 	LCD_Fill(0,0,LCD_W-1,LCD_H-1,Color);
 }
 
-
 //画点
 //POINT_COLOR:此点的颜色
-void LCD_DrawPoint(u16 x,u16 y)
+void LCD_DrawPoint(uint16_t x,uint16_t y)
 {
 	Address_set(x,y,x,y);//设置光标位置 
 	LCD_WR16(POINT_COLOR); 	    
-} 	 
+}
+	 
 //画一个大点
 //POINT_COLOR:此点的颜色
-void LCD_DrawPoint_big(u16 x,u16 y)
+void LCD_DrawPoint_big(uint16_t x,uint16_t y)
 {
 	LCD_Fill(x-1,y-1,x+1,y+1,POINT_COLOR);
-} 
-static void LCD_BlockWrite(const u8 *buffer, size_t nbyte)
+}
+
+static void LCD_BlockWrite(const uint8_t *buffer, size_t nbyte)
 {
-	const u8 *ptr=buffer+nbyte-900;
+	const uint8_t *ptr=buffer+nbyte-900;
 	for(;buffer<ptr;buffer+=900)
 	{
 		uwrite(buffer,900);
 	}
 	uwrite(buffer,ptr-buffer+900);
 }
-static void LCD_Set_Color_For_Fill(u8 *buffer, size_t nbyte, u16 color)
+
+static void LCD_Set_Color_For_Fill(uint8_t *buffer, size_t nbyte, uint16_t color)
 {
 	if(color==0xffff)
 	{
 		memset(buffer,0xff,nbyte);
 		return;
 	}
-	u8 *ptr1=(u8 *)&color, *ptr2=buffer+nbyte;
-	u8 b=*(ptr1++), a=*ptr1;
+	uint8_t *ptr1=(uint8_t *)&color, *ptr2=buffer+nbyte;
+	uint8_t b=*(ptr1++), a=*ptr1;
 	for(;buffer<ptr2;)
 	{
 		*(buffer++)=a;
 		*(buffer++)=b;
 	}
 }
+
 //在指定区域内填充指定颜色
 //区域大小:
 //  (xend-xsta)*(yend-ysta)
-void LCD_Fill(u8 xsta,u8 ysta,u8 xend,u8 yend,u16 color)
+void LCD_Fill(uint8_t xsta,uint8_t ysta,uint8_t xend,uint8_t yend,uint16_t color)
 {          
-	u8 *buffer; 
+	uint8_t *buffer; 
 	size_t nbyte=BPP*(xend-xsta+1)*(yend-ysta+1);
 	Address_set(xsta,ysta,xend,yend);
 	
-	buffer = (u8 *) malloc (nbyte);
+	buffer = (uint8_t *) malloc (nbyte);
 	if (buffer==NULL) {
         fprintf(stderr,"[LCD]Failed malloc buffer of size %ld\n\tFatal Error Exit\n",nbyte);
         exit(1);
@@ -215,16 +215,17 @@ void LCD_Fill(u8 xsta,u8 ysta,u8 xend,u8 yend,u16 color)
 	LCD_BlockWrite(buffer,nbyte);
 	free(buffer);
 }
-void LCD_ShowImageRaw(u8 xsta, u8 ysta, u8 xlen, u8 ylen, const u8 *image)
+
+void LCD_ShowImageRaw(uint8_t xsta, uint8_t ysta, uint8_t xlen, uint8_t ylen, const uint8_t *image)
 {
 	// check validation, to be fulfilled
 	// flow control
 	// write
 	// for security, don't write too much one time
 	// might need return errno
-	u8 xend=xsta+xlen-1, yend=ysta+ylen-1;
+	uint8_t xend=xsta+xlen-1, yend=ysta+ylen-1;
 	if(xend>LCD_W-1 || yend>LCD_H-1 || image==NULL) {
-        fprintf(stderr,"[LCD]LCD_ShowImageRaw(): Illegal arg(s), return\n");
+        fprintf(stderr,"[AirSniffer][LCD]LCD_ShowImageRaw(): Illegal arg(s)\n");
         return;
     }
 	size_t nbyte=BPP*xlen*ylen;
@@ -232,7 +233,7 @@ void LCD_ShowImageRaw(u8 xsta, u8 ysta, u8 xlen, u8 ylen, const u8 *image)
 	LCD_BlockWrite(image,nbyte);
 }
 
-void swap(u16 *x, u16 *y)
+static void swap(uint16_t *x, uint16_t *y)
 {
 	*x^=*y;
 	*y^=*x;
@@ -242,7 +243,7 @@ void swap(u16 *x, u16 *y)
 //画线
 //x0,y0:起点坐标
 //x1,y1:终点坐标  
-void LCD_DrawLine(u16 x0, u16 y0, u16 x1, u16 y1)
+void LCD_DrawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
 {
 	int dx= abs(x1-x0), sx=(x0<x1) ? 1 : -1;
 	int dy=-abs(y1-y0), sy=(y0<y1) ? 1 : -1;
@@ -266,7 +267,7 @@ void LCD_DrawLine(u16 x0, u16 y0, u16 x1, u16 y1)
 }
 
 //画矩形
-void LCD_DrawRectangle(u16 x1, u16 y1, u16 x2, u16 y2)
+void LCD_DrawRectangle(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2)
 {
 	LCD_DrawLine(x1,y1,x2,y1);
 	LCD_DrawLine(x1,y1,x1,y2);
@@ -276,7 +277,7 @@ void LCD_DrawRectangle(u16 x1, u16 y1, u16 x2, u16 y2)
 //在指定位置画一个指定大小的圆
 //(x,y):中心点
 //r    :半径
-void Draw_Circle(u16 x0,u16 y0,u8 r)
+void LCD_Draw_Circle(uint16_t x0,uint16_t y0,uint8_t r)
 {
 	int a,b;
 	int di;
@@ -305,107 +306,153 @@ void Draw_Circle(u16 x0,u16 y0,u8 r)
 	}
 } 
 
-
-
-
-
-void show_unit() {
-	LCD_ShowImageRaw(UXSTA,UYSTA,UNITWIDTH,UNITHEIGHT,gImage_unit);
-}
-
-void display_welcome() {
-	LCD_ShowImageRaw(0,0,LCD_W,LCD_H,gImage_boot);
-}
-
-void display_battery(char state) {
-	const u8 *ptr;
-    int i;
-    switch(state) {
-        case 'f':
-            i=0;
-            break;
-        case 'l':
-            i=1;
-            break;
-        case 'c':
-            i=2;
-            break;
-        case 'n':
-            i=3;
-            break;
-    }
-    
-    ptr=gImage_battery[i];
-    LCD_ShowImageRaw(LCD_W-CHARGEWIDTH,LCD_H-CHARGEHEIGHT,CHARGEWIDTH,CHARGEHEIGHT,ptr);
-}
-
-static void shownumRaw(int num,int bit) {
-	if(num<0 || num>10 || bit<0 || bit>=NMAXBIT) {
-        fprintf(stderr,"[LCD]shownumRaw(): Illegal arg(s), return\n");
-        return;
-    }
-	LCD_ShowImageRaw(NXSTA-bit*NUMWIDTH, NYSTA, NUMWIDTH, NUMHEIGHT, gImage_numchars[num]);
-}
-
-void display_nums(int num) {
-	int bit, token=0, nlist[3];
-    
-    if(num>=100000)
+/*---------------------------------------------------------------------------*/
+static void display_img(struct image* img,int x,int y)
+{
+    load_image(img);
+    if(img->img)
     {
-        num=99999;
+        LCD_ShowImageRaw(x,y,img->width,img->height,img->img);
+        free_image(img);
     }
-    else if(num<0)
+}
+
+static void display_int
+(
+    int num,
+    int max_digit,
+    int max,
+    struct image* digits,
+    struct image* blank,
+    int x,
+    int y
+)
+{
+	int i;
+    int d;
+    int flag=0;
+    int w;
+    
+    w=digits[0].width;
+    
+    if(num>max)
+    {
+        num=max;
+    }
+    else if(num<0) //TODO: add possible minus display
     {
         num=0;
     }
     
-	for(bit=0;bit<NMAXBIT;bit++) {
-		nlist[bit]=num%10;
-		num/=10;
-	}
-	for(bit=NMAXBIT-1;bit>=0;bit--) {
-        if(nlist[bit]||token||bit==0) {
-            token=1;
-            shownumRaw(nlist[bit],bit);
+	for(i=0;i<max_digit;++i)
+    {
+		if(flag)
+        {
+            display_img(blank,x,y);
+            x-=w;
         }
-        else {
-            shownumRaw(10,bit);
+        else
+        {
+            d=num%10;
+            num/=10;
+            
+            display_img(digits+d,x,y);
+            x-=w;
+            
+            if(num==0)
+            {
+                flag=1;
+            }
         }
 	}
 }
-
-void display_net_conn(int wifion) {
-		LCD_ShowImageRaw(LCD_W/2,LCD_H-NETHEIGHT,NETHEIGHT,NETHEIGHT,(wifion) ? gImage_net30[0] : gImage_net30[1]);
-}
-
-
-static void display_screenraw(int k, int modeupdown)
-{
-	const u8 *ptr1, *ptr2;
-	if(modeupdown) {
-		ptr1=gImage_div_upper[k];
-		ptr2=gImage_div_lower[k];
-	}
-	else {
-		//ptr1=gImage_div_left[k];
-		//ptr2=gImage_div_right[k];
-	}
-	
-	LCD_ShowImageRaw(0,0,DIVWIDTH_1,DIVHEIGHT_1,ptr1);
-	LCD_ShowImageRaw(DIV2XSTA,DIV2YSTA,DIVWIDTH_2,DIVHEIGHT_2,ptr2);
-}
-void display_screen(int k)
-{
-	display_screenraw(k, MODEDIVUPDOWN);
-}
-
 
 void display_init()
 {
-	LCD_Init();
+    LCD_Init();
 }
 
-void display_data(int num)
+void display_welcome()
 {
-	display_nums(num);
+    display_img(&image_welcome,0,0);
+}
+
+void display_battery(char state)
+{
+    struct image* img;
+    
+    switch(state)
+    {
+        case 'f':
+            img=&image_bat_full;
+            break;
+        case 'l':
+            img=&image_bat_low;
+            break;
+        case 'c':
+            img=&image_bat_charge;
+            break;
+        case 'b':
+            img=&image_bat_blank;
+            break;
+    }
+    
+    display_img(img,BAT_X_STA,BAT_Y_STA);
+}
+
+void display_data(int data)
+{
+    display_int
+    (
+        data,
+        NUM_MAX_DIGIT,
+        NUM_MAX,
+        image_num,
+        &image_num_blank,
+        NUM_X_STA,
+        NUM_Y_STA
+    );
+}
+
+void display_unit()
+{
+    display_img(&image_unit,UNIT_X_STA,UNIT_Y_STA);
+}
+
+void display_net(int conn)
+{
+    struct image* img;
+    switch(conn)
+    {
+        case 1:
+            img=&image_net_connnected;
+            break;
+        case 0:
+            img=&image_net_disconnnected;
+            break;
+    }
+}
+
+void display_upper(struct image* img)
+{
+    display_img(img,UPPER_X_STA,UPPER_Y_STA);
+}
+
+void display_temp(int temp)
+{
+    display_int
+    (
+        temp,
+        TEMP_MAX_DIGIT,
+        TEMP_MAX,
+        image_temp_num,
+        &image_temp_num_blank,
+        TEMP_NUM_X_STA,
+        TEMP_NUM_Y_STA
+    );
+}
+
+void display_temp_bg()
+{
+    display_img(&image_temp_bg,TEMP_X_STA,TEMP_Y_STA);
 }

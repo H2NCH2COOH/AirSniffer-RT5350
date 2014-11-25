@@ -23,6 +23,7 @@
 #include "gpio_pin.h"
 
 #include "lcd.h"
+#include "img.h"
 
 #include "ssconfig.h"
 #include "xively.h"
@@ -31,6 +32,7 @@
  * Configs
  *---------------------------------------------------------------------------*/
 //#define USE_WATCHDOG
+
 #ifdef USE_WATCHDOG
     #define WATCHDOG_DEV "/dev/watchdog"
 #endif
@@ -56,7 +58,7 @@
 
 #define SENSOR_CALC_INTERVAL 60000
 
-#define GPIO_EVENT_COOLDOWN 1000
+#define GPIO_EVENT_COOLDOWN 500
 
 #define DATA_AVE_NUMBER 10
 #define DATA_SEND_INTERVAL 10
@@ -73,6 +75,8 @@
 #define DISPLAY_TYPE_SETUP_FAIL     6
 #define DISPLAY_TYPE_BATTERY        7
 #define DISPLAY_TYPE_WIFI_CONN      8
+#define DISPLAY_TYPE_TEMP           9
+#define DISPLAY_TYPE_TEMP_BG        10
 /*---------------------------------------------------------------------------*
  * Globals
  *---------------------------------------------------------------------------*/
@@ -125,6 +129,9 @@ static double data_convert(double raw);
 static void stop_timer(struct itimerval *old);
 static void start_timer(struct itimerval *itv);
 static void display(int type,int data);
+static void add_gpio(int p,int interval);
+static void poll_gpio();
+static void gpio_event_handler(int pin,int level);
 
 /*---------------------------------------------------------------------------*
  * set_sigio_handler
@@ -414,7 +421,7 @@ static void display(int type,int data);
 }*/
 
 /*---------------------------------------------------------------------------*
- * GPIO Event
+ * GPIO event functions
  *---------------------------------------------------------------------------*/
 struct gpio_reg
 {
@@ -429,6 +436,17 @@ static struct gpio_reg* gpio_to_poll=NULL;
 static void add_gpio(int p,int interval)
 {
     struct gpio_reg* temp;
+    
+    temp=gpio_to_poll;
+    while(temp!=NULL)
+    {
+        if(temp->pin==p)
+        {
+            temp->interval=interval;
+            return;
+        }
+        temp=temp->next;
+    }
     
     temp=(struct gpio_reg*)malloc(sizeof(struct gpio_reg));
     temp->pin=p;
@@ -467,65 +485,70 @@ static void poll_gpio()
             {
                 temp->level=i;
                 
-                if(temp->cooldown==0)
+                if(temp->cooldown<GPIO_EVENT_COOLDOWN)
                 {
                     temp->cooldown=GPIO_EVENT_COOLDOWN;
                 }
-            
-                //sprintf(buf,"%d,%d",temp->pin,i);
-                printf("[AirSniffer][Main]GPIO event: pin%d->%d\n",temp->pin,i);
-                //send_to_main(CMD_GPIO_EVENT,buf);
                 
-                switch(temp->pin)
-                {
-                    case GPIO_PIN_BAT_FULL:
-                        if(temp->level==0)
-                        {
-                            battery_state|=BATTERY_STATE_FULL;
-                        }
-                        else
-                        {
-                            battery_state&=~BATTERY_STATE_FULL;
-                        }
-                        break;
-                    case GPIO_PIN_BAT_CHARGE:
-                        if(temp->level==0)
-                        {
-                            battery_state|=BATTERY_STATE_CHARGE;
-                        }
-                        else
-                        {
-                            battery_state&=~BATTERY_STATE_CHARGE;
-                        }
-                        break;
-                    case GPIO_PIN_BAT_LOW:
-                        if(temp->level==0)
-                        {
-                            battery_state|=BATTERY_STATE_LOW;
-                        }
-                        else
-                        {
-                            battery_state&=~BATTERY_STATE_LOW;
-                        }
-                        break;
-                    case GPIO_PIN_BACK_BUTTON:
-                        if((!wifi_setup_flag)&&(temp->level==0))
-                        {
-                            wifi_setup_flag=1;
-                        }
-                        break;
-                    default:
-                        break; //What just happened?
-                }
-                
-                break;
+                gpio_event_handler(temp->pin,temp->level);
             }
         }
         
         temp=temp->next;
     }
 }
-
+/*---------------------------------------------------------------------------*
+ * GPIO poll event handler
+ * Called for every gpio event during gpio poll
+ *---------------------------------------------------------------------------*/
+static void gpio_event_handler(int pin,int level)
+{
+    //sprintf(buf,"%d,%d",pin,level);
+    printf("[AirSniffer][Main]GPIO event: pin%d->%d\n",pin,level);
+    //send_to_main(CMD_GPIO_EVENT,buf);
+    
+    switch(pin)
+    {
+        case GPIO_PIN_BAT_FULL:
+            if(level==0)
+            {
+                battery_state|=BATTERY_STATE_FULL;
+            }
+            else
+            {
+                battery_state&=~BATTERY_STATE_FULL;
+            }
+            break;
+        case GPIO_PIN_BAT_CHARGE:
+            if(level==0)
+            {
+                battery_state|=BATTERY_STATE_CHARGE;
+            }
+            else
+            {
+                battery_state&=~BATTERY_STATE_CHARGE;
+            }
+            break;
+        case GPIO_PIN_BAT_LOW:
+            if(level==0)
+            {
+                battery_state|=BATTERY_STATE_LOW;
+            }
+            else
+            {
+                battery_state&=~BATTERY_STATE_LOW;
+            }
+            break;
+        case GPIO_PIN_BACK_BUTTON:
+            if((!wifi_setup_flag)&&(level==0))
+            {
+                wifi_setup_flag=1;
+            }
+            break;
+        default:
+            break; //What just happened?
+    }
+}
 /*---------------------------------------------------------------------------*
  * SIGALRM handler
  * Ping children and restart them if died
@@ -584,7 +607,6 @@ static void main_sigalrm_handler(int signal)
             break;
     }*/
     
-    static int cc=0;
     double raw;
     
     debug=0;
@@ -622,11 +644,12 @@ static void main_sigalrm_handler(int signal)
     poll_gpio();
     debug=5;
     
+    /*static int cc=0;
     if(++cc>=2000)
     {
         printf("|\n");
         cc=0;
-    }
+    }*/
 }
 
 /*---------------------------------------------------------------------------*
@@ -844,38 +867,42 @@ static void display(int type,int data)
     {
         case DISPLAY_TYPE_PLEASE_WAIT:
             current_is_data=0;
-            display_screen(0);
+            display_upper(&image_please_wait);
             break;
         case DISPLAY_TYPE_DATA_BG:
             break;
         case DISPLAY_TYPE_DATA:
             if(!current_is_data)
             {
-                display_screen(1);
-                //usleep(1000);
-                //show_unit();
-                //usleep(1000);
+                display_upper(&image_data_bg);
+                display_unit();
                 current_is_data=1;
             }
             display_data(data);
             break;
         case DISPLAY_TYPE_PLEASE_SETUP:
             current_is_data=0;
-            display_screen(2);
+            display_upper(&image_please_setup);
             break;
         case DISPLAY_TYPE_SETUP_SUCC:
             current_is_data=0;
-            display_screen(3);
+            display_upper(&image_setup_success);
             break;
         case DISPLAY_TYPE_SETUP_FAIL:
             current_is_data=0;
-            display_screen(4);
+            display_upper(&image_setup_fail);
             break;
         case DISPLAY_TYPE_BATTERY:
             display_battery((char)data);
             break;
         case DISPLAY_TYPE_WIFI_CONN:
-            display_net_conn(data);
+            display_net(data);
+            break;
+        case DISPLAY_TYPE_TEMP:
+            display_temp(data);
+            break;
+        case DISPLAY_TYPE_TEMP_BG:
+            display_temp_bg();
             break;
         default:
             break;
@@ -891,8 +918,8 @@ static void gpio_init()
     //Sensor
     gpio_request(GPIO_PIN_SENSOR,NULL);
     gpio_direction_input(GPIO_PIN_SENSOR);
-    gpio_request(GPIO_PIN_SENSOR2,NULL);
-    gpio_direction_input(GPIO_PIN_SENSOR2);
+    //gpio_request(GPIO_PIN_SENSOR2,NULL);
+    //gpio_direction_input(GPIO_PIN_SENSOR2);
     
     //LCD A0
     //gpio_request(GPIO_PIN_LED_A0,NULL);
@@ -910,11 +937,16 @@ static void gpio_init()
     gpio_request(GPIO_PIN_BACK_BUTTON,NULL);
     gpio_direction_input(GPIO_PIN_BACK_BUTTON);
     
-    add_gpio(GPIO_PIN_BAT_CHARGE,SENSOR_CALC_INTERVAL);
-    add_gpio(GPIO_PIN_BAT_LOW,SENSOR_CALC_INTERVAL);
-    add_gpio(GPIO_PIN_BAT_FULL,SENSOR_CALC_INTERVAL);
+    //Front button
+    gpio_request(GPIO_PIN_FRONT_BUTTON,NULL);
+    gpio_direction_input(GPIO_PIN_FRONT_BUTTON);
+    
+    add_gpio(GPIO_PIN_BAT_CHARGE,2000);
+    add_gpio(GPIO_PIN_BAT_LOW,2000);
+    add_gpio(GPIO_PIN_BAT_FULL,2000);
     
     add_gpio(GPIO_PIN_BACK_BUTTON,10);
+    add_gpio(GPIO_PIN_FRONT_BUTTON,10);
 }
 /*---------------------------------------------------------------------------*
  * SIGINT handler
@@ -993,7 +1025,7 @@ int main(int argc,char* argv[])
             break;
         case 's':
             display_screen(1);
-            show_unit();
+            display_unit();
             break;
     }
     return;*/
@@ -1020,12 +1052,12 @@ int main(int argc,char* argv[])
     //Configure GPIOs
     gpio_init();
     
-    //init display
+    /*init display
     display_init();
     printf("[AirSniffer][Main]LCD init finished\n");
     
     display_welcome();
-    sleep(2);
+    sleep(2);*/
     
     //Set SIGALRM handler
     act.sa_handler=main_sigalrm_handler;
@@ -1090,6 +1122,11 @@ int main(int argc,char* argv[])
     
     display(DISPLAY_TYPE_PLEASE_WAIT,0);
     
+    display(DISPLAY_TYPE_TEMP_BG,0);
+    
+    //TODO: read temperature
+    display(DISPLAY_TYPE_TEMP,rand()%50); //FIXME: change random temp to real
+    
     //Start timer
     start_timer(NULL);
     
@@ -1123,7 +1160,7 @@ int main(int argc,char* argv[])
             
             if(battery_state==0)
             {
-                display(DISPLAY_TYPE_BATTERY,'n');
+                display(DISPLAY_TYPE_BATTERY,'b');
             }
             else if(battery_state&BATTERY_STATE_FULL)
             {
@@ -1150,6 +1187,9 @@ int main(int argc,char* argv[])
             #ifdef USE_WATCHDOG
                 feed_dog();
             #endif
+            
+            //TODO: read temperature
+            display(DISPLAY_TYPE_TEMP,rand()%50); //FIXME: change random temp to real
             
             if(current_data_number<DATA_AVE_NUMBER)
             {

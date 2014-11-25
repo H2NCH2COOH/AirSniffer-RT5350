@@ -17,9 +17,6 @@ start() {
     
     echo "[AirSniffer]Starting"
     
-    modprobe as-spi-gpio
-    modprobe as-spi-gpio-dev
-    
     ifconfig $STA_DEV up
     #iw phy $phy interfacce add $AP_DEV type managed
     
