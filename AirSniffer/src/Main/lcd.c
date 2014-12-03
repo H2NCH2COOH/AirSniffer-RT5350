@@ -386,6 +386,9 @@ void display_battery(char state)
         case 'f':
             img=&image_bat_full;
             break;
+        case 'h':
+            img=&image_bat_half;
+            break;
         case 'l':
             img=&image_bat_low;
             break;
@@ -431,6 +434,8 @@ void display_net(int conn)
             img=&image_net_disconnnected;
             break;
     }
+    
+    display_img(img,NET_X_STA,NET_Y_STA);
 }
 
 void display_upper(struct image* img)

@@ -11,6 +11,8 @@ STA_DEV=wlan0
 DEV_CONFIG=/etc/config/device.conf
 WPA_CONFIG=/etc/config/wpa_supplicant.conf
 
+TEMP_PIN=25
+
 start() {
     exec 1>/dev/console
     exec 2>/dev/console
@@ -30,6 +32,9 @@ EOF
     
     wpa_supplicant -B -i $STA_DEV -c $WPA_CONFIG
     udhcpc -b -i $STA_DEV -s /etc/udhcpc.script
+    
+    insmod w1-gpio-custom bus0=0,$TEMP_PIN,0
+    
     if [ -f $DEV_CONFIG ]; then
         $APP &
     else

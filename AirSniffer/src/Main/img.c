@@ -26,6 +26,7 @@ struct image image_net_connnected={"/imgs/net/connected.img",NET_WIDTH,NET_HEIGH
 struct image image_net_disconnnected={"/imgs/net/disconnected.img",NET_WIDTH,NET_HEIGHT,NULL};
 
 struct image image_bat_full={"/imgs/battery/full.img",BAT_WIDTH,BAT_HEIGHT,NULL};
+struct image image_bat_half={"/imgs/battery/half.img",BAT_WIDTH,BAT_HEIGHT,NULL};
 struct image image_bat_low={"/imgs/battery/low.img",BAT_WIDTH,BAT_HEIGHT,NULL};
 struct image image_bat_charge={"/imgs/battery/charge.img",BAT_WIDTH,BAT_HEIGHT,NULL};
 struct image image_bat_blank={"/imgs/battery/blank.img",BAT_WIDTH,BAT_HEIGHT,NULL};
@@ -77,6 +78,7 @@ int load_image(struct image* img)
     buff=(unsigned char*)malloc(s);
     fread(buff,1,s,f);
     img->img=buff;
+    fclose(f);
     
     return 0;
 }

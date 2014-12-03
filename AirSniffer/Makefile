@@ -12,7 +12,7 @@ define Package/$(PKG_NAME)
 	SECTION:=utils
 	CATEGORY:=Utilities
 	TITLE:=Air Sniffer
-    DEPENDS:=+libugpio
+	DEPENDS:=+libugpio
 endef
 
 define Package/$(PKG_NAME)/description
@@ -25,18 +25,19 @@ define Build/Prepare
 endef
 
 define Package/$(PKG_NAME)/install
-	#Device.id
-	$(INSTALL_DIR) $(1)/etc/config
-	$(INSTALL_BIN) ./files/device.id $(1)/etc/config/
-    
-    #Device.conf
-	$(INSTALL_DIR) $(1)/etc/config
-	$(INSTALL_BIN) ./files/device.conf $(1)/etc/config/
+	##Device.id
+	#$(INSTALL_DIR) $(1)/etc/config
+	#$(CP) ./files/device.id $(1)/etc/config/
 	
-	#Main
+	##Device.conf
+	$(INSTALL_DIR) $(1)/etc/config
+	$(CP) ./files/device.conf $(1)/etc/config/
+	
+	##Main
 	$(INSTALL_DIR) $(1)/usr/bin
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/Main/AirSniffer $(1)/usr/bin/
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/Main/Welcome $(1)/usr/bin/
+	$(INSTALL_BIN) ./files/Main/read_temp.sh $(1)/usr/bin/
 	
 	$(INSTALL_DIR) $(1)/
 	$(INSTALL_BIN) ./files/Main/dev_setup.sh $(1)/
@@ -52,7 +53,7 @@ define Package/$(PKG_NAME)/install
 	$(INSTALL_BIN) ./files/Main/dhcpd.conf $(1)/etc/config/
 	$(INSTALL_BIN) ./files/Main/network $(1)/etc/config/
 	
-	#CGI
+	##CGI
 	$(INSTALL_DIR) $(1)/usr/bin
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/CGI/wifi_setup_agent $(1)/usr/bin/
 	
@@ -63,7 +64,7 @@ define Package/$(PKG_NAME)/install
 	$(INSTALL_BIN) ./files/CGI/ask $(1)/www/cgi-bin/
 	$(INSTALL_BIN) ./files/CGI/sethost $(1)/www/cgi-bin/
 	
-	#imgs
+	##imgs
 	$(CP) ./files/imgs $(1)/
 endef
 

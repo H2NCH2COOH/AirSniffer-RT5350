@@ -58,8 +58,6 @@
 
 #define SENSOR_CALC_INTERVAL 60000
 
-#define GPIO_EVENT_COOLDOWN 500
-
 #define DATA_AVE_NUMBER 10
 #define DATA_SEND_INTERVAL 10
 
@@ -102,6 +100,8 @@ static int net_pong=0;
 static int wifi_setup_flag=0;
 
 static int battery_state=0;
+
+static int button_front=0;
 
 static int count=0;
 static int sensor_low=0;
@@ -475,21 +475,11 @@ static void poll_gpio()
         else
         {
             i=gpio_get_value(temp->pin);
-            
-            if(temp->interval>0)
-            {
-                temp->cooldown=temp->interval;
-            }
+            temp->cooldown=temp->interval;
             
             if(temp->level!=i)
             {
                 temp->level=i;
-                
-                if(temp->cooldown<GPIO_EVENT_COOLDOWN)
-                {
-                    temp->cooldown=GPIO_EVENT_COOLDOWN;
-                }
-                
                 gpio_event_handler(temp->pin,temp->level);
             }
         }
@@ -519,6 +509,7 @@ static void gpio_event_handler(int pin,int level)
                 battery_state&=~BATTERY_STATE_FULL;
             }
             break;
+#if PIN_VER==4
         case GPIO_PIN_BAT_CHARGE:
             if(level==0)
             {
@@ -529,6 +520,7 @@ static void gpio_event_handler(int pin,int level)
                 battery_state&=~BATTERY_STATE_CHARGE;
             }
             break;
+#endif
         case GPIO_PIN_BAT_LOW:
             if(level==0)
             {
@@ -918,34 +910,28 @@ static void gpio_init()
     //Sensor
     gpio_request(GPIO_PIN_SENSOR,NULL);
     gpio_direction_input(GPIO_PIN_SENSOR);
-    //gpio_request(GPIO_PIN_SENSOR2,NULL);
-    //gpio_direction_input(GPIO_PIN_SENSOR2);
-    
-    //LCD A0
-    //gpio_request(GPIO_PIN_LED_A0,NULL);
-    //gpio_direction_output(GPIO_PIN_LED_A0,0);
     
     //Battery
+#if PIN_VER==4
     gpio_request(GPIO_PIN_BAT_CHARGE,NULL);
     gpio_direction_input(GPIO_PIN_BAT_CHARGE);
+    add_gpio(GPIO_PIN_BAT_CHARGE,2000);
+#endif
     gpio_request(GPIO_PIN_BAT_LOW,NULL);
     gpio_direction_input(GPIO_PIN_BAT_LOW);
+    add_gpio(GPIO_PIN_BAT_LOW,2000);
     gpio_request(GPIO_PIN_BAT_FULL,NULL);
     gpio_direction_input(GPIO_PIN_BAT_FULL);
+    add_gpio(GPIO_PIN_BAT_FULL,2000);
     
     //Back button
     gpio_request(GPIO_PIN_BACK_BUTTON,NULL);
     gpio_direction_input(GPIO_PIN_BACK_BUTTON);
-    
+    add_gpio(GPIO_PIN_BACK_BUTTON,10);
+
     //Front button
     gpio_request(GPIO_PIN_FRONT_BUTTON,NULL);
     gpio_direction_input(GPIO_PIN_FRONT_BUTTON);
-    
-    add_gpio(GPIO_PIN_BAT_CHARGE,2000);
-    add_gpio(GPIO_PIN_BAT_LOW,2000);
-    add_gpio(GPIO_PIN_BAT_FULL,2000);
-    
-    add_gpio(GPIO_PIN_BACK_BUTTON,10);
     add_gpio(GPIO_PIN_FRONT_BUTTON,10);
 }
 /*---------------------------------------------------------------------------*
@@ -988,6 +974,37 @@ void sigint_handler()
     exit(1);
 }
 /*---------------------------------------------------------------------------*
+ * Read temperature
+ *---------------------------------------------------------------------------*/
+int read_temp()
+{
+    FILE* f;
+    char buff[32];
+    int t,r;
+    
+    return rand()%40;
+    
+    f=popen("read_temp.sh","r");
+    if(f==NULL)
+    {
+        fprintf(stderr,"[AirSniffer][Main]Error read temperature\n");
+        return -1;
+    }
+    fgets(buff,sizeof(buff),f);
+    pclose(f);
+    
+    t=atoi(buff);
+    t/=100;
+    r=t%10;
+    t/=10;
+    if(r>=5)
+    {
+        ++t;
+    }
+    printf("[AirSniffer][Main]Read temperature: %d\n",t);
+    return t;
+}
+/*---------------------------------------------------------------------------*
  * Main
  *---------------------------------------------------------------------------*/
 int main(int argc,char* argv[])
@@ -1005,7 +1022,7 @@ int main(int argc,char* argv[])
     int flags;
     int fd;
     int ret;
-    int i;
+    int i,t;
     double raw;
     double converted;
     int old_battery_state;
@@ -1124,13 +1141,13 @@ int main(int argc,char* argv[])
     
     display(DISPLAY_TYPE_TEMP_BG,0);
     
-    //TODO: read temperature
-    display(DISPLAY_TYPE_TEMP,rand()%50); //FIXME: change random temp to real
+    t=read_temp();
+    display(DISPLAY_TYPE_TEMP,t);
+    
+    old_battery_state=battery_state;
     
     //Start timer
     start_timer(NULL);
-    
-    old_battery_state=battery_state;
     
     while(!_panic_)
     {
@@ -1160,7 +1177,7 @@ int main(int argc,char* argv[])
             
             if(battery_state==0)
             {
-                display(DISPLAY_TYPE_BATTERY,'b');
+                display(DISPLAY_TYPE_BATTERY,'h');
             }
             else if(battery_state&BATTERY_STATE_FULL)
             {
@@ -1188,9 +1205,6 @@ int main(int argc,char* argv[])
                 feed_dog();
             #endif
             
-            //TODO: read temperature
-            display(DISPLAY_TYPE_TEMP,rand()%50); //FIXME: change random temp to real
-            
             if(current_data_number<DATA_AVE_NUMBER)
             {
                 ++current_data_number;
@@ -1211,6 +1225,12 @@ int main(int argc,char* argv[])
                 }
                 raw/=current_data_number;
                 converted=data_convert(raw);
+                
+                //Read temperature
+                stop_timer(NULL);
+                t=read_temp();
+                display(DISPLAY_TYPE_TEMP,t);
+                start_timer(NULL);
                 
                 display(DISPLAY_TYPE_DATA,(int)converted);
                 

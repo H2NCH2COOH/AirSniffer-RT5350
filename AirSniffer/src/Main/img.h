@@ -64,6 +64,7 @@ extern struct image image_num[10];
 extern struct image image_net_connnected;
 extern struct image image_net_disconnnected;
 extern struct image image_bat_full;
+extern struct image image_bat_half;
 extern struct image image_bat_low;
 extern struct image image_bat_charge;
 extern struct image image_bat_blank;
