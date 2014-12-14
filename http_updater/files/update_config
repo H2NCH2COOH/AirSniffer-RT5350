@@ -1,0 +1,51 @@
+#!/bin/sh
+
+CONFIG_FILE=/etc/config/device.conf
+
+eval $(echo "$QUERY_STRING"|awk -F'&' '{for(i=1;i<=NF;i++){print $i}}')
+
+if [ "$useip" == "on" ]; then
+    HOST=$ip
+else
+    HOST=$REMOTE_ADDR
+fi
+
+OUT=$(tftp -g -r $file $HOST)
+
+if [ "$?" == "0" ]; then
+    #Success
+    tr -d '\015' <$file >$CONFIG_FILE
+    (sleep 10; reboot)&
+    
+    cat << EOF
+    Content-type: text/html
+
+    <html>
+        <head>
+            <title>Success</title>
+        </head>
+        <body>
+            <h2>Device config updated</h2>
+            <p>reboot in 10 seconds</p>
+        </body>
+    </html>
+EOF
+    
+else
+    #Failed
+    cat << EOF
+    Content-type: text/html
+
+    <html>
+        <head>
+            <title>Failed</title>
+        </head>
+        <body>
+            <h2>Update Failed</h2>
+            <p>$OUT</p>
+        </body>
+    </html>
+EOF
+fi
+
+rm $file

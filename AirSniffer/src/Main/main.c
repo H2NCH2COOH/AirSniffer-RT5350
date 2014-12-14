@@ -706,11 +706,11 @@ static int wifi_setup()
     
     printf("[AirSniffer][Main]AP ready\n");
     
-    #ifdef USE_WATCHDOG
-        write(watchdog,"V",1);
-        close(watchdog);
-        watchdog=0;
-    #endif
+#ifdef USE_WATCHDOG
+    write(watchdog,"V",1);
+    close(watchdog);
+    watchdog=0;
+#endif
     
     
     //Ceate FIFO for finishing signal
@@ -792,16 +792,16 @@ exit:
 
     //system("ifconfig " AP_DEV " down"); //Auto concat
 succ:
-    #ifdef USE_WATCHDOG
-        watchdog=open(WATCHDOG_DEV,O_WRONLY);
-        if(watchdog<=0)
-        {
-            _panic_=1;
-            fprintf(stderr,"[AirSniffer][Main]Can't open watchdog\nPanic & Exit\n");
-            ret=-1;
-        }
-        feed_dog();
-    #endif
+#ifdef USE_WATCHDOG
+    watchdog=open(WATCHDOG_DEV,O_WRONLY);
+    if(watchdog<=0)
+    {
+        _panic_=1;
+        fprintf(stderr,"[AirSniffer][Main]Can't open watchdog\nPanic & Exit\n");
+        ret=-1;
+    }
+    feed_dog();
+#endif
     
     wifi_setup_flag=0;
     
@@ -1049,16 +1049,16 @@ int main(int argc,char* argv[])
     
     printf("[AirSniffer][Main]Start\n");
     
-    #ifdef USE_WATCHDOG
-        watchdog=open(WATCHDOG_DEV,O_WRONLY);
-        if(watchdog<=0)
-        {
-            _panic_=1;
-            fprintf(stderr,"[AirSniffer][Main]Can't open watchdog\nPanic & Exit\n");
-            goto panic;
-        }
-        feed_dog();
-    #endif
+#ifdef USE_WATCHDOG
+    watchdog=open(WATCHDOG_DEV,O_WRONLY);
+    if(watchdog<=0)
+    {
+        _panic_=1;
+        fprintf(stderr,"[AirSniffer][Main]Can't open watchdog\nPanic & Exit\n");
+        goto panic;
+    }
+    feed_dog();
+#endif
     
     //Don't panic, for now
     _panic_=0;
@@ -1141,9 +1141,11 @@ int main(int argc,char* argv[])
     
     display(DISPLAY_TYPE_TEMP_BG,0);
     
+#if PIN_VER==5
     t=read_temp();
     display(DISPLAY_TYPE_TEMP,t);
-    
+#endif
+
     old_battery_state=battery_state;
     
     //Start timer
@@ -1201,9 +1203,9 @@ int main(int argc,char* argv[])
             
             new_data=0;
             
-            #ifdef USE_WATCHDOG
-                feed_dog();
-            #endif
+#ifdef USE_WATCHDOG
+            feed_dog();
+#endif
             
             if(current_data_number<DATA_AVE_NUMBER)
             {
@@ -1226,11 +1228,13 @@ int main(int argc,char* argv[])
                 raw/=current_data_number;
                 converted=data_convert(raw);
                 
+#if PIN_VER==5
                 //Read temperature
                 stop_timer(NULL);
                 t=read_temp();
                 display(DISPLAY_TYPE_TEMP,t);
                 start_timer(NULL);
+#endif
                 
                 display(DISPLAY_TYPE_DATA,(int)converted);
                 
