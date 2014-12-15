@@ -19,8 +19,6 @@ start() {
     
     echo "[AirSniffer]Starting"
     
-    ifconfig br-lan 10.10.10.254
-    
     ifconfig $STA_DEV up
     #iw phy $phy interfacce add $AP_DEV type managed
     
@@ -46,6 +44,8 @@ EOF
         echo "and setup device configuration"
         echo "========================================================================="
     fi
+    
+    ifconfig br-lan 10.10.10.254
 }
 
 stop() {

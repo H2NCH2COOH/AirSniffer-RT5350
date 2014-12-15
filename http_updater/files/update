@@ -1,5 +1,7 @@
 #!/bin/sh
 
+APP=AirSniffer
+
 eval $(echo "$QUERY_STRING"|awk -F'&' '{for(i=1;i<=NF;i++){print $i}}')
 
 if [ "$useip" == "on" ]; then
@@ -12,6 +14,8 @@ OUT=$(tftp -g -r $file $HOST)
 
 if [ "$?" == "0" ]; then
     #Success
+    killall $APP
+    
     OUT="$OUT
     
 $(opkg install $file)"

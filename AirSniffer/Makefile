@@ -30,8 +30,8 @@ define Package/$(PKG_NAME)/install
 	#$(CP) ./files/device.id $(1)/etc/config/
 	
 	##Device.conf
-	#$(INSTALL_DIR) $(1)/etc/config
-	#$(CP) ./files/device.conf $(1)/etc/config/
+	$(INSTALL_DIR) $(1)/etc/config
+	$(CP) ./files/device.conf $(1)/etc/config/
 	
 	##Main
 	$(INSTALL_DIR) $(1)/usr/bin

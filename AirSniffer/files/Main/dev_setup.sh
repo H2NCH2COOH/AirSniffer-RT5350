@@ -26,7 +26,7 @@ IFS=':'
 array=$mac_addr
 fs=""
 for i in $array; do
-        fs="$fs\x$i"
+    fs="$fs\x$i"
 done
 IFS=$old_IFS
 
