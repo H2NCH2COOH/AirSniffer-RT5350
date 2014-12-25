@@ -1,7 +1,7 @@
 #ifndef _AS_GPIO_PIN_H_
 #define _AS_GPIO_PIN_H_
 
-#define PIN_VER 4
+#define PIN_VER 5
 
 #if PIN_VER==4
     /* ver 4 */

@@ -17,6 +17,7 @@ OBJECTS += img.o
 OBJECTS += sshttp.o
 OBJECTS += ssconfig.o
 OBJECTS += xively.o
+OBJECTS += upload.o
 
 WELCOME_OBJ = welcome.o
 WELCOME_OBJ += lcd.o
@@ -34,6 +35,8 @@ HEADERS += lcd.h
 #HEADERS += datalcd.h
 HEADERS += gpio_pin.h
 HEADERS += img.h
+HEADERS += main.h
+HEADERS += upload.h
 
 %.o: %.c $(HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@

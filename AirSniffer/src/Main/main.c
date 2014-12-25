@@ -1,5 +1,7 @@
 #define _GNU_SOURCE
 
+#include "main.h"
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -26,55 +28,15 @@
 #include "img.h"
 
 #include "ssconfig.h"
-#include "xively.h"
 
-/*---------------------------------------------------------------------------*
- * Configs
- *---------------------------------------------------------------------------*/
-//#define USE_WATCHDOG
-
-#ifdef USE_WATCHDOG
-    #define WATCHDOG_DEV "/dev/watchdog"
+#if UPLOAD==UPLOAD_XIVELY
+    #include "xively.h"
+#elif UPLOAD==UPLOAD_ALIYUN
+    #include "upload.h"
+#else
+    #error "Unknown upload method!"
 #endif
 
-#define PING_INTERVAL 120
-
-#define ID_FILE "/etc/config/device.id"
-#define CONFIG_FILE "/etc/config/device.conf"
-
-#define AP_DEV "wlan1"
-#define HOSTAPD_CONFIG_FILE "/etc/config/hostapd.conf"
-
-#define STA_DEV "wlan0"
-#define WPA_CTRL_PATH "/var/run/wpa_supplicant/wlan0"
-#define WPA_CONFIG "/etc/config/wpa_supplicant.conf"
-
-#define DHCPD_CONFIG "/etc/config/dhcpd.conf"
-
-#define WIFI_SETUP_TIMEOUT 300
-#define SIGNAL_FIFO "/tmp/assigfifo"
-
-#define SENSOR_READ_INTERVAL_US 500
-
-#define SENSOR_CALC_INTERVAL 60000
-
-#define DATA_AVE_NUMBER 10
-#define DATA_SEND_INTERVAL 10
-
-#define BATTERY_STATE_CHARGE    (1<<0)
-#define BATTERY_STATE_LOW       (1<<1)
-#define BATTERY_STATE_FULL      (1<<2)
-
-#define DISPLAY_TYPE_PLEASE_WAIT    1
-#define DISPLAY_TYPE_DATA_BG        2
-#define DISPLAY_TYPE_DATA           3
-#define DISPLAY_TYPE_PLEASE_SETUP   4
-#define DISPLAY_TYPE_SETUP_SUCC     5
-#define DISPLAY_TYPE_SETUP_FAIL     6
-#define DISPLAY_TYPE_BATTERY        7
-#define DISPLAY_TYPE_WIFI_CONN      8
-#define DISPLAY_TYPE_TEMP           9
-#define DISPLAY_TYPE_TEMP_BG        10
 /*---------------------------------------------------------------------------*
  * Globals
  *---------------------------------------------------------------------------*/
@@ -522,7 +484,7 @@ static void gpio_event_handler(int pin,int level)
             break;
 #endif
         case GPIO_PIN_BAT_LOW:
-            if(level==0)
+            if(level==1)
             {
                 battery_state|=BATTERY_STATE_LOW;
             }
@@ -982,7 +944,7 @@ int read_temp()
     char buff[32];
     int t,r;
     
-    return rand()%40;
+    //return rand()%40;
     
     f=popen("read_temp.sh","r");
     if(f==NULL)
@@ -1146,7 +1108,7 @@ int main(int argc,char* argv[])
     display(DISPLAY_TYPE_TEMP,t);
 #endif
 
-    old_battery_state=battery_state;
+    old_battery_state=-1;
     
     //Start timer
     start_timer(NULL);
@@ -1253,15 +1215,23 @@ int main(int argc,char* argv[])
                     sprintf(buf,"%10d",(int)converted);
                     data=append_data_point(data,ID_PM25,buf);
                     
-                    get_config(CONFIG_KEY_FEED_ID,feed_id);
-                    get_config(CONFIG_KEY_API_KEY,api_key);
-                    
                     //Stop timer
                     stop_timer(NULL);
                     
                     debug+=800;
                     
+#if UPLOAD==UPLOAD_XIVELY
+                    get_config(CONFIG_KEY_FEED_ID,feed_id);
+                    get_config(CONFIG_KEY_API_KEY,api_key);
+                    
                     if(update_feed(feed_id,api_key,data)<0)
+#elif UPLOAD==UPLOAD_ALIYUN
+                    get_config(CONFIG_KEY_DEVICE_ID,id);
+                    
+                    if(upload(id,data)<0)
+#else
+    #error "Unknown upload method!"
+#endif 
                     {
                         //Update failed
                         /*Send disconnected CMD
