@@ -309,29 +309,42 @@ void LCD_Draw_Circle(uint16_t x0,uint16_t y0,uint8_t r)
 /*---------------------------------------------------------------------------*/
 static void display_img(struct image* img,int x,int y)
 {
-    load_image(img);
-    if(img->img)
+    int loaded=0;
+    
+    if(img->img==NULL)
     {
-        LCD_ShowImageRaw(x,y,img->width,img->height,img->img);
+        load_image(img);
+        if(img->img==NULL)
+        {
+            fprintf(stderr,"[AirSniffer][lcd]display_image(): Null image\n");
+            return;
+        }
+        loaded=1;
+    }
+    
+    LCD_ShowImageRaw(x,y,img->width,img->height,img->img);
+    
+    if(loaded)
+    {
         free_image(img);
     }
 }
 
-static void display_int
+void display_int
 (
     int num,
     int max_digit,
     int max,
     struct image* digits,
     struct image* blank,
-    int x,
-    int y
+    unsigned int x,
+    unsigned int y
 )
 {
 	int i;
     int d;
     int flag=0;
-    int w;
+    unsigned int w;
     
     w=digits[0].width;
     
@@ -445,19 +458,59 @@ void display_upper(struct image* img)
 
 void display_temp(int temp)
 {
+    int i;
+    struct image d[10]={0};
+    struct image b={0};
+    
+    for(i=0;i<10;++i)
+    {
+        load_image(image_num+i);
+    }
+    load_image(&image_num_blank);
+    
+    for(i=0;i<10;++i)
+    {
+        d[i].width=TEMP_NUM_WIDTH;
+        d[i].height=TEMP_NUM_HEIGHT;
+        resize_image(image_num+i,d+i);
+    }
+    b.width=TEMP_NUM_WIDTH;
+    b.height=TEMP_NUM_HEIGHT;
+    resize_image(&image_num_blank,&b);
+    
     display_int
     (
         temp,
         TEMP_MAX_DIGIT,
         TEMP_MAX,
-        image_temp_num,
-        &image_temp_num_blank,
+        d,
+        &b,
         TEMP_NUM_X_STA,
         TEMP_NUM_Y_STA
     );
+    
+    for(i=0;i<10;++i)
+    {
+        free_image(image_num+i);
+        free_image(d+i);
+    }
+    free_image(&image_num_blank);
+    free_image(&b);
 }
 
 void display_temp_bg()
 {
     display_img(&image_temp_bg,TEMP_X_STA,TEMP_Y_STA);
+}
+
+void display_temp_blank()
+{
+    display_img(&image_temp_blank,TEMP_X_STA,TEMP_Y_STA);
+}
+
+void display_spinner(int frame)
+{
+    struct image* img;
+    img=(frame>=0)? (image_spinner+frame):&image_spinner_blank;
+    display_img(img,SPINNER_X_STA,SPINNER_Y_STA);
 }

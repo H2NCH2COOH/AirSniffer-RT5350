@@ -30,8 +30,8 @@ define Package/$(PKG_NAME)/install
 	#$(CP) ./files/device.id $(1)/etc/config/
 	
 	##Device.conf
-	$(INSTALL_DIR) $(1)/etc/config
-	$(CP) ./files/device.conf $(1)/etc/config/
+	#$(INSTALL_DIR) $(1)/etc/config
+	#$(CP) ./files/device.conf $(1)/etc/config/
 	
 	##Main
 	$(INSTALL_DIR) $(1)/usr/bin
@@ -39,8 +39,8 @@ define Package/$(PKG_NAME)/install
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/Main/Welcome $(1)/usr/bin/
 	$(INSTALL_BIN) ./files/Main/read_temp.sh $(1)/usr/bin/
 	
-	$(INSTALL_DIR) $(1)/
-	$(INSTALL_BIN) ./files/Main/dev_setup.sh $(1)/
+	#$(INSTALL_DIR) $(1)/
+	#$(INSTALL_BIN) ./files/Main/dev_setup.sh $(1)/
 	
 	$(INSTALL_DIR) $(1)/etc
 	$(INSTALL_BIN) ./files/Main/udhcpc.script $(1)/etc/

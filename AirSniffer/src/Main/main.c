@@ -29,13 +29,8 @@
 
 #include "ssconfig.h"
 
-#if UPLOAD==UPLOAD_XIVELY
-    #include "xively.h"
-#elif UPLOAD==UPLOAD_ALIYUN
-    #include "upload.h"
-#else
-    #error "Unknown upload method!"
-#endif
+#include "xively.h"
+#include "upload.h"
 
 /*---------------------------------------------------------------------------*
  * Globals
@@ -46,18 +41,6 @@ static int _panic_=0;
     static int watchdog;
     #define feed_dog() write(watchdog,"f",1)
 #endif
-
-static pid_t pid_of_sensor=0;
-static int pipe_to_sensor=0;
-static int pipe_from_sensor=0;
-
-static int sensor_pong=0;
-
-static pid_t pid_of_net=0;
-static int pipe_to_net=0;
-static int pipe_from_net=0;
-
-static int net_pong=0;
 
 static int wifi_setup_flag=0;
 
@@ -74,313 +57,24 @@ static int current_data_number=0;
 static double* new_data_ptr=sensor_data;
 static int data_send_counter=0;
 
-static const char* ID_RAW_DATA="raw_data";
-static const char* ID_PM25="PM25";
+static const char* KEY_RAW_DATA="raw_data";
+static const char* KEY_PM25="PM25";
+
+static int spinner_frame=0;
 
 static int debug;
 /*---------------------------------------------------------------------------*
  * Prototypes
  *---------------------------------------------------------------------------*/
-//static void set_sigio_handler(int fd,void (*sigaction)(int,siginfo_t*,void*));
-//static int start_sensor_process();
-//static int start_net_process();
-//static void main_sigio_handler(int signal,siginfo_t* info, void* value);
 static void main_sigalrm_handler(int signal);
 static int wifi_setup();
 static double data_convert(double raw);
 static void stop_timer(struct itimerval *old);
 static void start_timer(struct itimerval *itv);
 static void display(int type,int data);
-static void add_gpio(int p,int interval);
+static void add_gpio(int p,int interval,int cooldown);
 static void poll_gpio();
 static void gpio_event_handler(int pin,int level);
-
-/*---------------------------------------------------------------------------*
- * set_sigio_handler
- * Set <sigaction> as handler for SIGIO by <fd>
- *---------------------------------------------------------------------------*/
-/*static void set_sigio_handler(int fd,void (*action)(int,siginfo_t*,void*))
-{
-    struct sigaction act;
-    int flags;
-    
-    memset(&act,0,sizeof(act));
-    act.sa_sigaction=action;
-    act.sa_flags=SA_RESTART|SA_SIGINFO;
-    sigaction(SIGIO,&act,NULL);
-    fcntl(fd,F_SETOWN,getpid());
-    flags=fcntl(fd,F_GETFL);
-    fcntl(fd,F_SETFL,flags|O_ASYNC);
-    fcntl(fd,F_SETSIG,SIGIO);
-}*/
-
-/*---------------------------------------------------------------------------*
- * Start sensor process
- *---------------------------------------------------------------------------*/
-/*static int start_sensor_process()
-{
-    int pipe_ends[2];
-    int pipe_in,pipe_out;
-    pid_t pid;
-    
-    if(pid_of_sensor>0)
-    {
-        kill(pid_of_sensor,SIGKILL);
-    }
-    
-    if(pipe_from_sensor>0)
-    {
-        close(pipe_from_sensor);
-    }
-    
-    if(pipe_to_sensor>0)
-    {
-        close(pipe_to_sensor);
-    }
-    
-    if(pipe(pipe_ends)==-1)
-    {
-        perror("[AirSniffer][Main]Error creating pipe");
-        return -1;
-    }
-    pipe_from_sensor=pipe_ends[0];
-    pipe_out=pipe_ends[1];
-    
-    if(pipe(pipe_ends)==-1)
-    {
-        perror("[AirSniffer][Main]Error creating pipe");
-        return -1;
-    }
-    pipe_to_sensor=pipe_ends[1];
-    pipe_in=pipe_ends[0];
-    
-    pid=fork();
-    if(pid==-1)
-    {
-        perror("[AirSniffer][Main]Error doing fork");
-        return -1;
-    }
-    else if(pid==0)
-    {
-        //Child
-        //Enable async on input pipe
-        set_sigio_handler(pipe_in,sensor_sigio_handler);
-        
-        //Run sensor main function
-        sensor_main(pipe_in,pipe_out);
-        return -1; //Panic: main function should not exit
-    }
-    
-    //Parent
-    pid_of_sensor=pid;
-    //Enable async on input pipe
-    set_sigio_handler(pipe_from_sensor,main_sigio_handler);
-    
-    return 0;
-}*/
-
-/*---------------------------------------------------------------------------*
- * Start network process
- *---------------------------------------------------------------------------*/
-/*static int start_net_process()
-{
-    int pipe_ends[2];
-    int pipe_in,pipe_out;
-    pid_t pid;
-    
-    if(pid_of_net>0)
-    {
-        kill(pid_of_net,SIGKILL);
-    }
-    
-    if(pipe_from_net>0)
-    {
-        close(pipe_from_net);
-    }
-    
-    if(pipe_to_net>0)
-    {
-        close(pipe_to_net);
-    }
-    
-    if(pipe(pipe_ends)==-1)
-    {
-        perror("[AirSniffer][Main]Error creating pipe");
-        return -1;
-    }
-    pipe_from_net=pipe_ends[0];
-    pipe_out=pipe_ends[1];
-    
-    if(pipe(pipe_ends)==-1)
-    {
-        perror("[AirSniffer][Main]Error creating pipe");
-        return -1;
-    }
-    pipe_to_net=pipe_ends[1];
-    pipe_in=pipe_ends[0];
-    
-    pid=fork();
-    if(pid==-1)
-    {
-        perror("[AirSniffer][Main]Error doing fork");
-        return -1;
-    }
-    else if(pid==0)
-    {
-        //Child
-        //Enable async on input pipe
-        set_sigio_handler(pipe_in,net_sigio_handler);
-        
-        //Run sensor main function
-        net_main(pipe_in,pipe_out);
-        return -1; //Panic: main function should not exit
-    }
-    
-    //Parent
-    pid_of_net=pid;
-    //Enable async on input pipe
-    set_sigio_handler(pipe_from_net,main_sigio_handler);
-    
-    return 0;
-}*/
-
-/*---------------------------------------------------------------------------*
- * SIGIO handler
- * Receive comm from children and do things according to CMD byte
- *---------------------------------------------------------------------------*/
-/*static void main_sigio_handler(int signal,siginfo_t* info, void* value)
-{
-    static char buf[128];
-    char *sp;
-    size_t len;
-    int pin,lvl;
-    
-    len=read(info->si_fd,buf,sizeof(buf));
-    
-    if(info->si_fd==pipe_from_sensor)
-    {
-        //From sensor
-        switch(buf[0])
-        {
-            case CMD_PONG:
-                sensor_pong=1;
-                break;
-            case CMD_NEW_DATA:
-                if(sscanf(buf+1,"%lf",new_data_ptr)!=1)
-                {
-                    fprintf(stderr,"[AirSniffer][Main]Can't parse new data. Ignored\n");
-                    break;
-                }
-                printf("[AirSniffer][Main]Received raw data: %f\n",*new_data_ptr);
-                new_data=1;
-                break;
-            case CMD_GET_CONFIG:
-                buf[0]=CMD_CONFIG;
-                get_config(buf+1,buf+1);
-                write(pipe_to_sensor,buf,2+strlen(buf+1));
-                break;
-            case CMD_SET_CONFIG:
-                sp=strchr(buf+1,'=');
-                if(sp==NULL)
-                {
-                    fprintf(stderr,"[AirSniffer][Main]Can't parse set config cmd: %s\n",buf+1);
-                    break;
-                }
-                *sp='\0';
-                ++sp;
-                set_config(buf+1,sp);
-                if(dump_config(CONFIG_FILE)<0)
-                {
-                    fprintf(stderr,"[AirSniffer][Main]Error dumping config, config lost possible\n");
-                }
-                break;
-            case CMD_GPIO_EVENT:
-                if(sscanf(buf+1,"%d,%d",&pin,&lvl)!=2)
-                {
-                    fprintf(stderr,"[AirSniffer][Main]Can't parse GPIO Event. Ignored\n");
-                    break;
-                }
-                printf("[AirSniffer][Main]Received GPIO event: pin%d->%d\n",pin,lvl);
-                switch(pin)
-                {
-                    case GPIO_PIN_BAT_CHARGE:
-                        if(lvl==0)
-                        {
-                            battery_state|=BATTERY_STATE_CHARGE;
-                        }
-                        else
-                        {
-                            battery_state&=~BATTERY_STATE_CHARGE;
-                        }
-                        break;
-                    case GPIO_PIN_BAT_LOW:
-                        if(lvl==0)
-                        {
-                            battery_state|=BATTERY_STATE_LOW;
-                        }
-                        else
-                        {
-                            battery_state&=~BATTERY_STATE_LOW;
-                        }
-                        break;
-                    case GPIO_PIN_BACK_BUTTON:
-                        if((!wifi_setup_flag)&&(lvl==0))
-                        {
-                            wifi_setup_flag=1;
-                        }
-                        break;
-                    default:
-                        break; //What just happened?
-                }
-                break;
-            default:
-                break; //What just happened?
-        }
-    }
-    else if(info->si_fd==pipe_from_net)
-    {
-        //From net
-        switch(buf[0])
-        {
-            case CMD_PONG:
-                net_pong=1;
-                break;
-            case CMD_DISCONNECTED: //fall-through
-            case CMD_CONNECTED:
-                if(!wifi_setup_flag)
-                {
-                    write(pipe_to_sensor,buf,1);
-                }
-                break;
-            case CMD_GET_CONFIG:
-                buf[0]=CMD_CONFIG;
-                get_config(buf+1,buf+1);
-                write(pipe_to_net,buf,2+strlen(buf+1));
-                break;
-            case CMD_SET_CONFIG:
-                sp=strchr(buf+1,'=');
-                if(sp==NULL)
-                {
-                    fprintf(stderr,"[AirSniffer][Main]Can't parse set config cmd: %s\n",buf+1);
-                    break;
-                }
-                *sp='\0';
-                ++sp;
-                set_config(buf+1,sp);
-                if(dump_config(CONFIG_FILE)<0)
-                {
-                    fprintf(stderr,"[AirSniffer][Main]Error dumping config, config lost possible\n");
-                }
-                break;
-            default:
-                break; //What just happened?
-        }
-    }
-    else
-    {
-        return; //What just happened?
-    }
-}*/
 
 /*---------------------------------------------------------------------------*
  * GPIO event functions
@@ -391,11 +85,12 @@ struct gpio_reg
     int level;
     int interval;
     int cooldown;
+    int counter;
     struct gpio_reg* next;
 };
 static struct gpio_reg* gpio_to_poll=NULL;
 
-static void add_gpio(int p,int interval)
+static void add_gpio(int p,int interval,int cooldown)
 {
     struct gpio_reg* temp;
     
@@ -405,6 +100,7 @@ static void add_gpio(int p,int interval)
         if(temp->pin==p)
         {
             temp->interval=interval;
+            temp->cooldown=cooldown;
             return;
         }
         temp=temp->next;
@@ -414,15 +110,14 @@ static void add_gpio(int p,int interval)
     temp->pin=p;
     temp->level=-1;
     temp->interval=interval;
-    temp->cooldown=0;
+    temp->cooldown=cooldown;
+    temp->counter=0;
     temp->next=gpio_to_poll;
     gpio_to_poll=temp;
 }
 
 static void poll_gpio()
 {
-    //static char buf[128];
-    
     struct gpio_reg* temp;
     int i;
     
@@ -430,18 +125,22 @@ static void poll_gpio()
     
     while(temp!=NULL)
     {
-        if(temp->cooldown>0)
+        if(temp->counter>0)
         {
-            --(temp->cooldown);
+            --(temp->counter);
         }
         else
         {
             i=gpio_get_value(temp->pin);
-            temp->cooldown=temp->interval;
+            temp->counter=temp->interval;
             
             if(temp->level!=i)
             {
                 temp->level=i;
+                if(temp->cooldown>0)
+                {
+                    temp->counter=temp->cooldown;
+                }
                 gpio_event_handler(temp->pin,temp->level);
             }
         }
@@ -455,9 +154,7 @@ static void poll_gpio()
  *---------------------------------------------------------------------------*/
 static void gpio_event_handler(int pin,int level)
 {
-    //sprintf(buf,"%d,%d",pin,level);
     printf("[AirSniffer][Main]GPIO event: pin%d->%d\n",pin,level);
-    //send_to_main(CMD_GPIO_EVENT,buf);
     
     switch(pin)
     {
@@ -499,6 +196,8 @@ static void gpio_event_handler(int pin,int level)
                 wifi_setup_flag=1;
             }
             break;
+        case GPIO_PIN_FRONT_BUTTON:
+            break;
         default:
             break; //What just happened?
     }
@@ -509,101 +208,36 @@ static void gpio_event_handler(int pin,int level)
  *---------------------------------------------------------------------------*/
 static void main_sigalrm_handler(int signal)
 {
-    /*static int state=0;
-    char ping[5]={CMD_PING,'a','b','c','\0'};
-    
-    switch(state)
-    {
-        case 0: //Ping sensor
-            printf("[AirSniffer][Main]Ping sensor\n");
-            sensor_pong=0;
-            write(pipe_to_sensor,ping,sizeof(ping));
-            state=1;
-            alarm(1);
-            break;
-        case 1: //Ping sensor timeout
-            if(!sensor_pong&&start_sensor_process()<0)
-            {
-                //Failed starting child process, panic!
-                state=-1;
-                _panic_=1;
-            }
-            else
-            {
-                state=2;
-                alarm(1);
-            }
-            break;
-        case 2: //Ping net
-            printf("[AirSniffer][Main]Ping net\n");
-            net_pong=0;
-            write(pipe_to_net,ping,sizeof(ping));
-            state=3;
-            alarm(1);
-            break;
-        case 3: //Ping net timeout
-            if(!net_pong&&start_net_process()<0)
-            {
-                //Failed starting child process, panic!
-                state=-1;
-                _panic_=1;
-            }
-            else
-            {
-                state=0;
-                alarm(PING_INTERVAL);
-            }
-            break;
-        case -1: //Panic!
-        default:
-            _panic_=1;
-            state=-1;
-            break;
-    }*/
-    
     double raw;
+    static int spinner_count=0;
     
-    debug=0;
-    
+    //Sensor
     if(gpio_get_value(GPIO_PIN_SENSOR)==0)
     {
         ++sensor_low;
     }
-    
-    debug=1;
-    
     ++count;
-    
-    debug=2;
-    
     if(count>=SENSOR_CALC_INTERVAL)
     {
-        debug=3;
-        
         raw=(double)sensor_low/count;
         
         count=0;
         sensor_low=0;
-        
-        //sprintf(buf,"%f",raw);
-        //printf("[AirSniffer][Sensor]Send raw data to main: %s\n",buf);
-        //send_to_main(CMD_NEW_DATA,buf);
         
         printf("[AirSniffer][Main]New raw data: %f\n",raw);
         *new_data_ptr=raw;
         new_data=1;
     }
     
-    debug=4;
-    poll_gpio();
-    debug=5;
-    
-    /*static int cc=0;
-    if(++cc>=2000)
+    //Spinner
+    ++spinner_count;
+    if(spinner_count>=SPINNER_FRAME_LEN)
     {
-        printf("|\n");
-        cc=0;
-    }*/
+        spinner_count=0;
+        spinner_frame=(spinner_frame+1)%SPINNER_FRAME_COUNT;
+    }
+    
+    poll_gpio();
 }
 
 /*---------------------------------------------------------------------------*
@@ -812,6 +446,7 @@ static void start_timer(struct itimerval *itv)
 static void display(int type,int data)
 {
     static int current_is_data=0;
+    static int current_has_temp=0;
     
     struct itimerval itv;
     
@@ -853,10 +488,26 @@ static void display(int type,int data)
             display_net(data);
             break;
         case DISPLAY_TYPE_TEMP:
-            display_temp(data);
+            if(data!=TEMP_NO_DEVICE)
+            {
+                if(current_has_temp==0)
+                {
+                    display_temp_bg();
+                    current_has_temp=1;
+                }
+                display_temp(data);
+            }
+            else
+            {
+                if(current_has_temp)
+                {
+                    display_temp_blank();
+                    current_has_temp=0;
+                }
+            }
             break;
-        case DISPLAY_TYPE_TEMP_BG:
-            display_temp_bg();
+        case DISPLAY_TYPE_SPINNER:
+            display_spinner(data);
             break;
         default:
             break;
@@ -877,24 +528,24 @@ static void gpio_init()
 #if PIN_VER==4
     gpio_request(GPIO_PIN_BAT_CHARGE,NULL);
     gpio_direction_input(GPIO_PIN_BAT_CHARGE);
-    add_gpio(GPIO_PIN_BAT_CHARGE,2000);
+    add_gpio(GPIO_PIN_BAT_CHARGE,2000,0);
 #endif
     gpio_request(GPIO_PIN_BAT_LOW,NULL);
     gpio_direction_input(GPIO_PIN_BAT_LOW);
-    add_gpio(GPIO_PIN_BAT_LOW,2000);
+    add_gpio(GPIO_PIN_BAT_LOW,2000,0);
     gpio_request(GPIO_PIN_BAT_FULL,NULL);
     gpio_direction_input(GPIO_PIN_BAT_FULL);
-    add_gpio(GPIO_PIN_BAT_FULL,2000);
+    add_gpio(GPIO_PIN_BAT_FULL,2000,0);
     
     //Back button
     gpio_request(GPIO_PIN_BACK_BUTTON,NULL);
     gpio_direction_input(GPIO_PIN_BACK_BUTTON);
-    add_gpio(GPIO_PIN_BACK_BUTTON,10);
+    add_gpio(GPIO_PIN_BACK_BUTTON,10,1000);
 
     //Front button
     gpio_request(GPIO_PIN_FRONT_BUTTON,NULL);
     gpio_direction_input(GPIO_PIN_FRONT_BUTTON);
-    add_gpio(GPIO_PIN_FRONT_BUTTON,10);
+    add_gpio(GPIO_PIN_FRONT_BUTTON,10,1000);
 }
 /*---------------------------------------------------------------------------*
  * SIGINT handler
@@ -906,32 +557,6 @@ void sigint_handler()
     stop_timer(&itv);
     
     fprintf(stderr,"\nSIGINT!\ndebug=%d\n",debug);
-    
-    if
-    (
-        itv.it_interval.tv_sec>0||
-        itv.it_interval.tv_usec>0
-    )
-    {
-        fprintf(stderr,"interval>0\n");
-    }
-    else
-    {
-        fprintf(stderr,"interval==0\n");
-    }
-    
-    if
-    (
-        itv.it_value.tv_sec>0||
-        itv.it_value.tv_usec>0
-    )
-    {
-        fprintf(stderr,"itime>0\n");
-    }
-    else
-    {
-        fprintf(stderr,"itime==0\n");
-    }
     
     exit(1);
 }
@@ -950,10 +575,17 @@ int read_temp()
     if(f==NULL)
     {
         fprintf(stderr,"[AirSniffer][Main]Error read temperature\n");
-        return -1;
+        return TEMP_NO_DEVICE;
     }
     fgets(buff,sizeof(buff),f);
     pclose(f);
+    
+    if(strcmp(buff,"No device")==0)
+    {
+        //No device
+        printf("[AirSniffer][Main]Temperature: No device\n");
+        return TEMP_NO_DEVICE;
+    }
     
     t=atoi(buff);
     t/=100;
@@ -974,7 +606,6 @@ int main(int argc,char* argv[])
     FILE* file;
     char buf[128];
     char id[128];
-    char activation_code[128];
     char feed_id[128];
     char api_key[128];
     char c;
@@ -987,27 +618,17 @@ int main(int argc,char* argv[])
     int i,t;
     double raw;
     double converted;
-    int old_battery_state;
+    int last_battery_state;
     struct data_points* data;
+    struct xively_data_points* xively_data;
     struct itimerval itv;
+    int last_spinner_frame;
     
-    /*switch(argv[1][0])
-    {
-        case 'i':
-            LCD_Init();
-            break;
-        case 'w':
-            display_screen(0);
-            break;
-        case 'd':
-            display_data(123);
-            break;
-        case 's':
-            display_screen(1);
-            display_unit();
-            break;
-    }
-    return;*/
+    struct image d[10]={0};
+    struct image b={0};
+    
+    double r;
+    int w,h;
     
     printf("[AirSniffer][Main]Start\n");
     
@@ -1031,60 +652,10 @@ int main(int argc,char* argv[])
     //Configure GPIOs
     gpio_init();
     
-    /*init display
-    display_init();
-    printf("[AirSniffer][Main]LCD init finished\n");
-    
-    display_welcome();
-    sleep(2);*/
-    
     //Set SIGALRM handler
     act.sa_handler=main_sigalrm_handler;
     act.sa_flags=SA_RESTART;
     sigaction(SIGALRM,&act,NULL);
-    
-    if(access(CONFIG_FILE,F_OK)!=0)
-    {
-        //device.conf don't exist
-        //First boot
-        printf("[AirSniffer][Main]First boot\n");
-        
-        //Read device.id
-        if(read_config(ID_FILE)<0)
-        {
-            fprintf(stderr,"[AirSniffer][Main]Error reading: %s\n\t%s\nPanic & Exit\n",strerror(errno),ID_FILE);
-            goto panic;
-        }
-        
-        get_config(CONFIG_KEY_DEVICE_ID,id);
-        get_config(CONFIG_KEY_ACTIVATION_CODE,activation_code);
-        free_config();
-        
-        //Wifi setup
-        if(wifi_setup()<0)
-        {
-            fprintf(stderr,"[AirSniffer][Main]Can't setup wifi host!\nPanic & Exit\n");
-            goto panic;
-        }
-        
-        //Register device
-        ret=activate_device(activation_code,feed_id,api_key);
-        if(ret<0)
-        {
-            fprintf(stderr,"[AirSniffer][Main]Can't activate device! ret=%d\nPanic & Exit\n",ret);
-            goto panic;
-        }
-        
-        printf("[AirSinffer][Main]Device activated\n\tfeed id: %s\n\tapi key: %s\n",feed_id,api_key);
-        
-        //Write device.conf
-        free_config();
-        set_config(CONFIG_KEY_DEVICE_ID,id);
-        set_config(CONFIG_KEY_FEED_ID,feed_id);
-        set_config(CONFIG_KEY_API_KEY,api_key);
-        dump_config(CONFIG_FILE);
-        free_config();
-    }
     
     //Read configs from file
     if(read_config(CONFIG_FILE)<0)
@@ -1093,32 +664,37 @@ int main(int argc,char* argv[])
         goto panic;
     }
     
-    //start_sensor_process();
-    //start_net_process();
+    //Add default configs to old version config file
+    get_config(CONFIG_KEY_UPLOAD,buf);
+    if(buf[0]=='\0')
+    {
+        set_config(CONFIG_KEY_UPLOAD,"xively");
+    }
     
-    //Start first ping alram
-    //alarm(5);
+    //Save config to file
+    dump_config(CONFIG_FILE);
     
     display(DISPLAY_TYPE_PLEASE_WAIT,0);
-    
-    display(DISPLAY_TYPE_TEMP_BG,0);
     
 #if PIN_VER==5
     t=read_temp();
     display(DISPLAY_TYPE_TEMP,t);
 #endif
 
-    old_battery_state=-1;
+    last_battery_state=-1;
+    last_spinner_frame=-1;
     
     //Start timer
     start_timer(NULL);
     
     while(!_panic_)
     {
-        //feed_dog();
-        
+#ifdef USE_WATCHDOG
+        feed_dog();
+#endif
         debug%=100;
         
+        //WiFi Setup Task
         if(wifi_setup_flag)
         {
             //Stop timer
@@ -1129,13 +705,23 @@ int main(int argc,char* argv[])
             
             wifi_setup();
             
+            display(DISPLAY_TYPE_SPINNER,-1);
+            last_battery_state=-1;
             display(DISPLAY_TYPE_PLEASE_WAIT,0);
             
             //Restart timer
             start_timer(NULL);
         }
         
-        if(old_battery_state!=battery_state)
+        //Spinner
+        if(last_spinner_frame!=spinner_frame)
+        {
+            last_spinner_frame=spinner_frame;
+            display(DISPLAY_TYPE_SPINNER,spinner_frame);
+        }
+        
+        //Battery State Task
+        if(last_battery_state!=battery_state)
         {
             debug+=100;
             
@@ -1156,9 +742,10 @@ int main(int argc,char* argv[])
                 display(DISPLAY_TYPE_BATTERY,'l');
             }
             
-            old_battery_state=battery_state;
+            last_battery_state=battery_state;
         }
         
+        //New Data Task
         if(new_data)
         {
             debug+=200;
@@ -1206,50 +793,50 @@ int main(int argc,char* argv[])
                     
                     printf("[AirSniffer][Main]Sending new data\n");
                     
-                    //buf[0]=CMD_NEW_DATA;
-                    //sprintf(buf+1,"%10f,%10f",raw,converted);
-                    //write(pipe_to_net,buf,2+strlen(buf+1));
-                    
-                    sprintf(buf,"%10f",raw);
-                    data=append_data_point(NULL,ID_RAW_DATA,buf);
-                    sprintf(buf,"%10d",(int)converted);
-                    data=append_data_point(data,ID_PM25,buf);
-                    
                     //Stop timer
                     stop_timer(NULL);
                     
                     debug+=800;
                     
-#if UPLOAD==UPLOAD_XIVELY
-                    get_config(CONFIG_KEY_FEED_ID,feed_id);
-                    get_config(CONFIG_KEY_API_KEY,api_key);
-                    
-                    if(update_feed(feed_id,api_key,data)<0)
-#elif UPLOAD==UPLOAD_ALIYUN
-                    get_config(CONFIG_KEY_DEVICE_ID,id);
-                    
-                    if(upload(id,data)<0)
-#else
-    #error "Unknown upload method!"
-#endif 
+                    get_config(CONFIG_KEY_UPLOAD,buf);
+                    if(strcmp(buf,"none")!=0)
                     {
-                        //Update failed
-                        /*Send disconnected CMD
-                        c=CMD_DISCONNECTED;
-                        write(pipe_to_sensor,&c,1);*/
-                        printf("[AirSniffer][Main]Disconnected\n");
-                        display(DISPLAY_TYPE_WIFI_CONN,0);
+                        if(strcmp(buf,"aliyun")==0)
+                        {
+                            sprintf(buf,"%10f",raw);
+                            data=append_data_point(NULL,KEY_RAW_DATA,buf);
+                            sprintf(buf,"%10d",(int)converted);
+                            data=append_data_point(data,KEY_PM25,buf);
+                            get_config(CONFIG_KEY_DEVICE_ID,id);
+                            ret=upload(id,data);
+                            free_data_points(data);
+                        }
+                        else
+                        {
+                            sprintf(buf,"%10f",raw);
+                            xively_data=xively_append_data_point(NULL,KEY_RAW_DATA,buf);
+                            sprintf(buf,"%10d",(int)converted);
+                            xively_data=xively_append_data_point(xively_data,KEY_PM25,buf);
+                            get_config(CONFIG_KEY_FEED_ID,feed_id);
+                            get_config(CONFIG_KEY_API_KEY,api_key);
+                            ret=xively_update_feed(feed_id,api_key,xively_data);
+                            xively_free_data_points(xively_data);
+                        }
+
+                        if(ret<0)
+                        {
+                            //Upload failed
+                            printf("[AirSniffer][Main]Disconnected\n");
+                            display(DISPLAY_TYPE_WIFI_CONN,0);
+                        }
+                        else
+                        {
+                            //Upload success
+                            printf("[AirSniffer][Main]New data sent\n");
+                            printf("[AirSniffer][Main]Connected\n");
+                            display(DISPLAY_TYPE_WIFI_CONN,1);
+                        }
                     }
-                    else
-                    {
-                        printf("[AirSniffer][Main]New data sent\n");
-                        /*Send connected CMD
-                        c=CMD_CONNECTED;
-                        write(pipe_to_sensor,&c,1);*/
-                        printf("[AirSniffer][Main]Connected\n");
-                        display(DISPLAY_TYPE_WIFI_CONN,1);
-                    }
-                    free_data_points(data);
                     
                     //Restart timer
                     start_timer(NULL);
@@ -1259,6 +846,7 @@ int main(int argc,char* argv[])
         
         debug+=400;
         
+        //Make sure timer is running
         while(1)
         {
             getitimer(ITIMER_REAL,&itv);
@@ -1290,14 +878,7 @@ panic:
     //Free configs
     free_config();
     
-    //Kill children
-    //kill(pid_of_sensor,SIGKILL);
-    //kill(pid_of_net,SIGKILL);
-    
     printf("[AirSniffer][Main]Exit\n");
-    
-    //DISPLAY: panic screen
-    //LCD_Clear(BLACK);
     
     return -1; //Panic & Exit
 }

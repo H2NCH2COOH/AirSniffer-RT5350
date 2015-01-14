@@ -7,55 +7,67 @@
 #define BPP 2 //byte per pixel
 
 //UPPER
-#define UPPER_WIDTH     LCD_W
-#define UPPER_HEIGHT    98
-#define UPPER_X_STA     0
-#define UPPER_Y_STA     0    
+#define UPPER_WIDTH         LCD_W
+#define UPPER_HEIGHT        98
+#define UPPER_X_STA         0
+#define UPPER_Y_STA         0    
 
 //Number
-#define NUM_MAX_DIGIT   5 //digit from right to left
-#define NUM_MAX         99999
-#define NUM_WIDTH       30
-#define NUM_HEIGHT      36
-#define NUM_X_STA       (0+(NUM_MAX_DIGIT-1)*NUM_WIDTH)
-#define NUM_Y_STA       20
+#define NUM_MAX_DIGIT       5 //digit from right to left
+#define NUM_MAX             99999
+#define NUM_WIDTH           30
+#define NUM_HEIGHT          36
+#define NUM_X_STA           (0+(NUM_MAX_DIGIT-1)*NUM_WIDTH)
+#define NUM_Y_STA           20
 
 //Unit
-#define UNIT_WIDTH      LCD_W
-#define UNIT_HEIGHT     20
-#define UNIT_X_STA      0
-#define UNIT_Y_STA      70
-
-//Net
-#define NET_HEIGHT      (LCD_H-UPPER_HEIGHT)
-#define NET_WIDTH       NET_HEIGHT
-#define NET_X_STA       0
-#define NET_Y_STA       UPPER_HEIGHT
+#define UNIT_WIDTH          LCD_W
+#define UNIT_HEIGHT         20
+#define UNIT_X_STA          0
+#define UNIT_Y_STA          70
 
 //Temperature
-#define TEMP_WIDTH      80
-#define TEMP_HEIGHT     (LCD_H-UPPER_HEIGHT)
-#define TEMP_X_STA      (NET_X_STA+NET_WIDTH)
-#define TEMP_Y_STA      UPPER_HEIGHT
-#define TEMP_MAX        99
-#define TEMP_MAX_DIGIT  2
-#define TEMP_NUM_WIDTH  20
-#define TEMP_NUM_HEIGHT 24
-#define TEMP_NUM_X_STA  (TEMP_X_STA+5+(TEMP_MAX_DIGIT-1)*TEMP_NUM_WIDTH)
-#define TEMP_NUM_Y_STA  (TEMP_Y_STA+2)
+#define TEMP_WIDTH          80
+#define TEMP_HEIGHT         (LCD_H-UPPER_HEIGHT)
+#define TEMP_X_STA          0
+#define TEMP_Y_STA          UPPER_HEIGHT
+#define TEMP_MAX            99
+#define TEMP_MAX_DIGIT      2
+#define TEMP_NUM_WIDTH      20
+#define TEMP_NUM_HEIGHT     24
+#define TEMP_NUM_X_STA      (TEMP_X_STA+5+(TEMP_MAX_DIGIT-1)*TEMP_NUM_WIDTH)
+#define TEMP_NUM_Y_STA      (TEMP_Y_STA+2)
+
+//Net
+#define NET_HEIGHT          (LCD_H-UPPER_HEIGHT)
+#define NET_WIDTH           NET_HEIGHT
+#define NET_X_STA           (TEMP_X_STA+TEMP_WIDTH)
+#define NET_Y_STA           UPPER_HEIGHT
 
 //Battery
-#define BAT_WIDTH       50
-#define BAT_HEIGHT      (LCD_H-UPPER_HEIGHT)
-#define BAT_X_STA       (TEMP_X_STA+TEMP_WIDTH)
-#define BAT_Y_STA       (UPPER_HEIGHT)
+#define BAT_WIDTH           20
+#define BAT_HEIGHT          (LCD_H-UPPER_HEIGHT)
+#define BAT_X_STA           (NET_X_STA+NET_WIDTH)
+#define BAT_Y_STA           UPPER_HEIGHT
+
+//Spinner
+#define SPINNER_HEIGHT      (LCD_H-UPPER_HEIGHT)
+#define SPINNER_WIDTH       SPINNER_HEIGHT
+#define SPINNER_FRAME_COUNT 6
+#define SPINNER_X_STA       (BAT_X_STA+BAT_WIDTH)
+#define SPINNER_Y_STA       UPPER_HEIGHT
 
 struct image
 {
     const char* file_name;
-    int width;
-    int height;
-    const unsigned char* img;
+    unsigned int width;
+    unsigned int height;
+    unsigned char* img;
+};
+
+struct pixel
+{
+    char byte[BPP];
 };
 
 extern struct image image_welcome;
@@ -70,15 +82,21 @@ extern struct image image_bat_charge;
 extern struct image image_bat_blank;
 extern struct image image_unit;
 extern struct image image_temp_bg;
-extern struct image image_temp_num_blank;
-extern struct image image_temp_num[10];
+extern struct image image_temp_blank;
 extern struct image image_please_wait;
 extern struct image image_data_bg;
 extern struct image image_please_setup;
 extern struct image image_setup_fail;
 extern struct image image_setup_success;
+extern struct image image_spinner[SPINNER_FRAME_COUNT];
+extern struct image image_spinner_blank;
 
 int load_image(struct image* img);
 void free_image(struct image* img);
+
+int get_pixel(struct image* img,unsigned int x,unsigned int y,struct pixel* p);
+int set_pixel(struct image* img,unsigned int x,unsigned int y,struct pixel* p);
+
+int resize_image(struct image* src,struct image* dst);
 
 #endif /* _IMG_H_ */

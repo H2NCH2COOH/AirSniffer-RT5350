@@ -76,6 +76,9 @@ void display_net(int conn);
 void display_upper(struct image* img);
 void display_temp(int temp);
 void display_temp_bg();
+void display_temp_blank();
+void display_spinner(int frame);
+void display_int(int num,int max_digit,int max,struct image* digits,struct image* blank,unsigned int x,unsigned int y);
 /*---------------------------------------------------------------------------*/
 
 #endif

@@ -30,22 +30,21 @@ update_config=1
 EOF
     fi
     
-    wpa_supplicant -B -i $STA_DEV -c $WPA_CONFIG
-    udhcpc -b -i $STA_DEV -s /etc/udhcpc.script
-    
-    insmod w1-gpio-custom bus0=0,$TEMP_PIN,0
-    
-    if [ -f $DEV_CONFIG ]; then
-        $APP &
-    else
-        echo "========================================================================="
-        echo "Please wait till init complete then press ENTER to start console"
-        echo "After console started, please run \"./dev_setup.sh\""
-        echo "and setup device configuration"
-        echo "========================================================================="
+    if [ ! -f $DEV_CONFIG ]; then
+        cat > $DEV_CONFIG << EOF
+dev_id=Null
+upload=none
+EOF
     fi
     
+    source $DEV_CONFIG
+    
     ifconfig br-lan 10.10.10.254
+    wpa_supplicant -B -i $STA_DEV -c $WPA_CONFIG
+    udhcpc -b -i $STA_DEV -s /etc/udhcpc.script -h AirS_$dev_id
+    
+    insmod w1-gpio-custom bus0=0,$TEMP_PIN,0
+    $APP &
 }
 
 stop() {

@@ -5,20 +5,20 @@ static char target[TARGET_MAX_LEN];
 static char header[HEADER_MAX_LEN];
 static char body[BODY_MAX_LEN];
 
-struct data_points* append_data_point(struct data_points* root,const char* id,const char* value)
+struct xively_data_points* xively_append_data_point(struct xively_data_points* root,const char* id,const char* value)
 {
-	struct data_points* temp;
+	struct xively_data_points* temp;
 	
-	temp=(struct data_points*)malloc(sizeof(struct data_points));
+	temp=(struct xively_data_points*)malloc(sizeof(struct xively_data_points));
 	strcpy(temp->id,id);
 	strcpy(temp->value,value);
 	temp->next=root;
 	
 	return temp;
 }
-void free_data_points(struct data_points* root)
+void xively_free_data_points(struct xively_data_points* root)
 {
-	struct data_points* t;
+	struct xively_data_points* t;
 	while(root!=NULL)
 	{
 		t=root;
@@ -27,10 +27,10 @@ void free_data_points(struct data_points* root)
 	}
 }
 
-int update_feed(const char* feed_id,const char* api_key,struct data_points* data)
+int xively_update_feed(const char* feed_id,const char* api_key,struct xively_data_points* data)
 {
 	const char* temp;
-	struct data_points* d;
+	struct xively_data_points* d;
 	size_t s;
 	int i,ret=0;
     const char* hs[1];
@@ -115,7 +115,7 @@ int update_feed(const char* feed_id,const char* api_key,struct data_points* data
 	return -1;
 }
 
-int activate_device(const char* activation_code,char* feed_id,char* api_key)
+int xively_activate_device(const char* activation_code,char* feed_id,char* api_key)
 {
 	const char* temp;
 	char* bp;

@@ -1,9 +1,6 @@
 #ifndef _MAIN_H_
 #define _MAIN_H_
 
-/*---------------------------------------------------------------------------*
- * Configs
- *---------------------------------------------------------------------------*/
 //#define USE_WATCHDOG
 
 #ifdef USE_WATCHDOG
@@ -31,6 +28,8 @@
 
 #define SENSOR_CALC_INTERVAL 60000
 
+#define SPINNER_FRAME_LEN   (SENSOR_CALC_INTERVAL/SPINNER_FRAME_COUNT)
+
 #define DATA_AVE_NUMBER 10
 #define DATA_SEND_INTERVAL 10
 
@@ -47,10 +46,7 @@
 #define DISPLAY_TYPE_BATTERY        7
 #define DISPLAY_TYPE_WIFI_CONN      8
 #define DISPLAY_TYPE_TEMP           9
-#define DISPLAY_TYPE_TEMP_BG        10
+#define DISPLAY_TYPE_SPINNER        10
 
-#define UPLOAD_XIVELY   0
-#define UPLOAD_ALIYUN   1
-#define UPLOAD          UPLOAD_XIVELY
-
+#define TEMP_NO_DEVICE      -128
 #endif /* _MAIN_H_ */

@@ -46,6 +46,7 @@ int sshttp_request
     size_t bp=0;
     const char* s;
     struct pollfd pfd;
+    int ret;
 	
     errno=0;
     
@@ -64,7 +65,7 @@ int sshttp_request
 		return -2;
 	}
     
-	if(connect(fd,ai->ai_addr,ai->ai_addrlen)==-1)
+	if(connect(fd,ai->ai_addr,ai->ai_addrlen)<0)
 	{
 		freeaddrinfo(ai);
         perror("[sshttp]Error: connect()");
@@ -156,7 +157,7 @@ int sshttp_request
     }
     
     /*-----send request-----*/
-    if(send(fd,buff,bp,0)==-1)
+    if(send(fd,buff,bp,0)<0)
     {
         freeaddrinfo(ai);
         close(fd);
@@ -171,11 +172,19 @@ int sshttp_request
     pfd.events=POLLIN;
     pfd.revents=0;
     
-    if(poll(&pfd,1,TIMEOUT*1000)<=0)
+    ret=poll(&pfd,1,TIMEOUT*1000);
+    if(ret<=0)
     {
         freeaddrinfo(ai);
         close(fd);
-        perror("[sshttp]Error: poll()");
+        if(ret<0)
+        {
+            perror("[sshttp]Error: poll()");
+        }
+        else
+        {
+            fprintf(stderr,"[sshttp]Error: timeout\n");
+        }
         return -5;
     }
     
