@@ -57,25 +57,30 @@ static int current_data_number=0;
 static double* new_data_ptr=sensor_data;
 static int data_send_counter=0;
 
-static const char* KEY_RAW_DATA="raw_data";
-static const char* KEY_PM25="PM25";
+static const char* KEY_RAW_DATA="pm25raw";
+static const char* KEY_TEMP="temp";
 
 static int spinner_frame=0;
 
 static int debug;
+
+static int* timers[TIMERS_SIZE]={0};
+
+static int displaying_unit=UNIT_TYPE_PCS;
 /*---------------------------------------------------------------------------*
  * Prototypes
  *---------------------------------------------------------------------------*/
 static void main_sigalrm_handler(int signal);
 static int wifi_setup();
-static double data_convert(double raw);
+static int data_convert(double raw,int unit_type);
 static void stop_timer(struct itimerval *old);
 static void start_timer(struct itimerval *itv);
 static void display(int type,int data);
 static void add_gpio(int p,int interval,int cooldown);
 static void poll_gpio();
 static void gpio_event_handler(int pin,int level);
-
+int add_timer(int* timer);
+void remove_timer(int* timer);
 /*---------------------------------------------------------------------------*
  * GPIO event functions
  *---------------------------------------------------------------------------*/
@@ -197,9 +202,41 @@ static void gpio_event_handler(int pin,int level)
             }
             break;
         case GPIO_PIN_FRONT_BUTTON:
+            if((!wifi_setup_flag)&&(level==0))
+            {
+                displaying_unit=(displaying_unit==UNIT_TYPE_PCS)? UNIT_TYPE_UG:UNIT_TYPE_PCS;
+            }
             break;
         default:
             break; //What just happened?
+    }
+}
+/*---------------------------------------------------------------------------*
+ * Add/remove timer to timers
+ *---------------------------------------------------------------------------*/
+int add_timer(int* timer)
+{
+    int i;
+    for(i=0;i<TIMERS_SIZE;++i)
+    {
+        if(timers[i]==NULL||timers[i]==timer)
+        {
+            timers[i]=timer;
+            return 0;
+        }
+    }
+    return -1;
+}
+void remove_timer(int* timer)
+{
+    int i;
+    for(i=0;i<TIMERS_SIZE;++i)
+    {
+        if(timers[i]==timer)
+        {
+            timers[i]=NULL;
+            return;
+        }
     }
 }
 /*---------------------------------------------------------------------------*
@@ -208,15 +245,17 @@ static void gpio_event_handler(int pin,int level)
  *---------------------------------------------------------------------------*/
 static void main_sigalrm_handler(int signal)
 {
-    double raw;
     static int spinner_count=0;
     
+    double raw;
+    int i;
+    
     //Sensor
+    ++count;
     if(gpio_get_value(GPIO_PIN_SENSOR)==0)
     {
         ++sensor_low;
     }
-    ++count;
     if(count>=SENSOR_CALC_INTERVAL)
     {
         raw=(double)sensor_low/count;
@@ -237,6 +276,15 @@ static void main_sigalrm_handler(int signal)
         spinner_frame=(spinner_frame+1)%SPINNER_FRAME_COUNT;
     }
     
+    //Timer
+    for(i=0;i<TIMERS_SIZE;++i)
+    {
+        if(timers[i]&&*(timers[i]))
+        {
+            --*(timers[i]);
+        }
+    }
+    
     poll_gpio();
 }
 
@@ -248,7 +296,6 @@ static int wifi_setup()
     int fd,ret=0;
     struct pollfd pfd[1];
     char buff[64];
-    char id[128];
     FILE* file;
     
     wifi_setup_flag=1;
@@ -258,11 +305,12 @@ static int wifi_setup()
     display(DISPLAY_TYPE_PLEASE_WAIT,0);
     
     //Write config file for hostapd
-    get_config(CONFIG_KEY_DEVICE_ID,id);
+    get_config(CONFIG_KEY_DEVICE_ID,buff);
+    buff[8]='\0';
     file=fopen(HOSTAPD_CONFIG_FILE,"w");
     fprintf(file,"interface=" STA_DEV "\n"); //Auto concat
     fprintf(file,"driver=nl80211\n");
-    fprintf(file,"ssid=AirSniffer_%s\n",id);
+    fprintf(file,"ssid=AirS_%s\n",buff);
     fprintf(file,"channel=0\n");
     fprintf(file,"hw_mode=g\n");
     fprintf(file,"ignore_broadcast_ssid=0\n");
@@ -406,11 +454,24 @@ succ:
 /*---------------------------------------------------------------------------*
  * Data convert
  *---------------------------------------------------------------------------*/
-static double data_convert(double raw)
+static int data_convert(double raw,int unit_type)
 {
     double ret;
-    ret=raw*60000;
-    return ret;
+    
+    switch(unit_type)
+    {
+        case UNIT_TYPE_PCS:
+            ret=raw*60000;
+            break;
+        case UNIT_TYPE_UG:
+            ret=raw*3000;
+            break;
+        default:
+            ret=0;
+            break;
+    }
+    
+    return (int)ret;
 }
 /*---------------------------------------------------------------------------*
  * Start & Stop timer
@@ -458,13 +519,14 @@ static void display(int type,int data)
             current_is_data=0;
             display_upper(&image_please_wait);
             break;
-        case DISPLAY_TYPE_DATA_BG:
+        case DISPLAY_TYPE_UNIT:
+            display_unit(displaying_unit);
             break;
         case DISPLAY_TYPE_DATA:
             if(!current_is_data)
             {
                 display_upper(&image_data_bg);
-                display_unit();
+                display_unit(displaying_unit);
                 current_is_data=1;
             }
             display_data(data);
@@ -612,12 +674,14 @@ int main(int argc,char* argv[])
     
     struct sigaction act,old;
     
-    int flags;
+    int flag;
     int fd;
     int ret;
     int i,t;
     double raw;
-    double converted;
+    double current_display_data;
+    int current_displaying_unit;
+    int converted;
     int last_battery_state;
     struct data_points* data;
     struct xively_data_points* xively_data;
@@ -665,14 +729,20 @@ int main(int argc,char* argv[])
     }
     
     //Add default configs to old version config file
+    flag=0;
+    
     get_config(CONFIG_KEY_UPLOAD,buf);
     if(buf[0]=='\0')
     {
         set_config(CONFIG_KEY_UPLOAD,"xively");
+        flag=1;
     }
     
     //Save config to file
-    dump_config(CONFIG_FILE);
+    if(flag)
+    {
+        dump_config(CONFIG_FILE);
+    }
     
     display(DISPLAY_TYPE_PLEASE_WAIT,0);
     
@@ -683,6 +753,7 @@ int main(int argc,char* argv[])
 
     last_battery_state=-1;
     last_spinner_frame=-1;
+    current_displaying_unit=displaying_unit;
     
     //Start timer
     start_timer(NULL);
@@ -775,7 +846,8 @@ int main(int argc,char* argv[])
                     raw+=sensor_data[i];
                 }
                 raw/=current_data_number;
-                converted=data_convert(raw);
+                converted=data_convert(raw,current_displaying_unit);
+                current_display_data=raw;
                 
 #if PIN_VER==5
                 //Read temperature
@@ -785,7 +857,7 @@ int main(int argc,char* argv[])
                 start_timer(NULL);
 #endif
                 
-                display(DISPLAY_TYPE_DATA,(int)converted);
+                display(DISPLAY_TYPE_DATA,converted);
                 
                 if(++data_send_counter>=DATA_SEND_INTERVAL)
                 {
@@ -805,8 +877,11 @@ int main(int argc,char* argv[])
                         {
                             sprintf(buf,"%10f",raw);
                             data=append_data_point(NULL,KEY_RAW_DATA,buf);
-                            sprintf(buf,"%10d",(int)converted);
-                            data=append_data_point(data,KEY_PM25,buf);
+                            if(t!=TEMP_NO_DEVICE)
+                            {
+                                sprintf(buf,"%10d",t);
+                                data=append_data_point(data,KEY_TEMP,buf);
+                            }
                             get_config(CONFIG_KEY_DEVICE_ID,id);
                             ret=upload(id,data);
                             free_data_points(data);
@@ -815,15 +890,18 @@ int main(int argc,char* argv[])
                         {
                             sprintf(buf,"%10f",raw);
                             xively_data=xively_append_data_point(NULL,KEY_RAW_DATA,buf);
-                            sprintf(buf,"%10d",(int)converted);
-                            xively_data=xively_append_data_point(xively_data,KEY_PM25,buf);
+                            if(t!=TEMP_NO_DEVICE)
+                            {
+                                sprintf(buf,"%10d",t);
+                                xively_data=xively_append_data_point(xively_data,KEY_TEMP,buf);
+                            }
                             get_config(CONFIG_KEY_FEED_ID,feed_id);
                             get_config(CONFIG_KEY_API_KEY,api_key);
                             ret=xively_update_feed(feed_id,api_key,xively_data);
                             xively_free_data_points(xively_data);
                         }
 
-                        if(ret<0)
+                        if(ret!=0)
                         {
                             //Upload failed
                             printf("[AirSniffer][Main]Disconnected\n");
@@ -842,6 +920,17 @@ int main(int argc,char* argv[])
                     start_timer(NULL);
                 }
             }
+        }
+        
+        //Change unit
+        if(displaying_unit!=current_displaying_unit)
+        {
+            current_displaying_unit=displaying_unit;
+            stop_timer(NULL);
+            display(DISPLAY_TYPE_UNIT,0);
+            converted=data_convert(current_display_data,displaying_unit);
+            display(DISPLAY_TYPE_DATA,converted);
+            start_timer(NULL);
         }
         
         debug+=400;

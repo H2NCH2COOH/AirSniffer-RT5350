@@ -71,7 +71,7 @@ void display_init();
 void display_welcome();
 void display_battery(char state);
 void display_data(int num);
-void display_unit();
+void display_unit(int unit);
 void display_net(int conn);
 void display_upper(struct image* img);
 void display_temp(int temp);

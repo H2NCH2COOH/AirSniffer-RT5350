@@ -38,7 +38,7 @@
 #define BATTERY_STATE_FULL      (1<<2)
 
 #define DISPLAY_TYPE_PLEASE_WAIT    1
-#define DISPLAY_TYPE_DATA_BG        2
+#define DISPLAY_TYPE_UNIT           2
 #define DISPLAY_TYPE_DATA           3
 #define DISPLAY_TYPE_PLEASE_SETUP   4
 #define DISPLAY_TYPE_SETUP_SUCC     5
@@ -49,4 +49,10 @@
 #define DISPLAY_TYPE_SPINNER        10
 
 #define TEMP_NO_DEVICE      -128
+
+#define UNIT_TYPE_PCS   0
+#define UNIT_TYPE_UG    1
+
+#define TIMERS_SIZE      10
+
 #endif /* _MAIN_H_ */

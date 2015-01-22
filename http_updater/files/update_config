@@ -11,6 +11,8 @@ else
     HOST=$REMOTE_ADDR
 fi
 
+cd /tmp
+
 OUT=$(tftp -g -r $file $HOST)
 
 if [ "$?" == "0" ]; then
@@ -40,7 +42,7 @@ if [ "$?" == "0" ]; then
         rm /hexd
     fi
     
-    (sleep 10; reboot)&
+    (sleep 10; Welcome; reboot)&
     
     cat << EOF
     Content-type: text/html

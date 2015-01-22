@@ -10,16 +10,16 @@ else
     HOST=$REMOTE_ADDR
 fi
 
+cd /tmp
+
 OUT=$(tftp -g -r $file $HOST)
 
 if [ "$?" == "0" ]; then
     #Success
     killall $APP
     
-    OUT="$OUT
-    
-$(opkg install $file)"
-    (sleep 10; reboot)&
+    OUT="$OUT@@@@@$(opkg install $file)"
+    (sleep 10; Welcome; reboot)&
     
     cat << EOF
 Content-type: text/html

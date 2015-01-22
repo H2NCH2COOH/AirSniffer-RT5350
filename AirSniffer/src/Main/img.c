@@ -31,7 +31,8 @@ struct image image_bat_low={"/imgs/battery/low.img",BAT_WIDTH,BAT_HEIGHT,NULL};
 struct image image_bat_charge={"/imgs/battery/charge.img",BAT_WIDTH,BAT_HEIGHT,NULL};
 struct image image_bat_blank={"/imgs/battery/blank.img",BAT_WIDTH,BAT_HEIGHT,NULL};
 
-struct image image_unit={"/imgs/unit/unit.img",UNIT_WIDTH,UNIT_HEIGHT,NULL};
+struct image image_unit_pcs={"/imgs/unit/pcs.img",UNIT_WIDTH,UNIT_HEIGHT,NULL};
+struct image image_unit_ug={"/imgs/unit/ug.img",UNIT_WIDTH,UNIT_HEIGHT,NULL};
 
 struct image image_temp_bg={"/imgs/temp/bg.img",TEMP_WIDTH,TEMP_HEIGHT,NULL};
 struct image image_temp_blank={"/imgs/temp/blank.img",TEMP_WIDTH,TEMP_HEIGHT,NULL};

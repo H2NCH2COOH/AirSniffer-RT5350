@@ -26,10 +26,16 @@
 #define UNIT_X_STA          0
 #define UNIT_Y_STA          70
 
+//Battery
+#define BAT_WIDTH           20
+#define BAT_HEIGHT          (LCD_H-UPPER_HEIGHT)
+#define BAT_X_STA           0
+#define BAT_Y_STA           UPPER_HEIGHT
+
 //Temperature
 #define TEMP_WIDTH          80
 #define TEMP_HEIGHT         (LCD_H-UPPER_HEIGHT)
-#define TEMP_X_STA          0
+#define TEMP_X_STA          (BAT_X_STA+BAT_WIDTH)
 #define TEMP_Y_STA          UPPER_HEIGHT
 #define TEMP_MAX            99
 #define TEMP_MAX_DIGIT      2
@@ -44,17 +50,11 @@
 #define NET_X_STA           (TEMP_X_STA+TEMP_WIDTH)
 #define NET_Y_STA           UPPER_HEIGHT
 
-//Battery
-#define BAT_WIDTH           20
-#define BAT_HEIGHT          (LCD_H-UPPER_HEIGHT)
-#define BAT_X_STA           (NET_X_STA+NET_WIDTH)
-#define BAT_Y_STA           UPPER_HEIGHT
-
 //Spinner
 #define SPINNER_HEIGHT      (LCD_H-UPPER_HEIGHT)
 #define SPINNER_WIDTH       SPINNER_HEIGHT
 #define SPINNER_FRAME_COUNT 6
-#define SPINNER_X_STA       (BAT_X_STA+BAT_WIDTH)
+#define SPINNER_X_STA       (NET_X_STA+NET_WIDTH)
 #define SPINNER_Y_STA       UPPER_HEIGHT
 
 struct image
@@ -80,7 +80,8 @@ extern struct image image_bat_half;
 extern struct image image_bat_low;
 extern struct image image_bat_charge;
 extern struct image image_bat_blank;
-extern struct image image_unit;
+extern struct image image_unit_pcs;
+extern struct image image_unit_ug;
 extern struct image image_temp_bg;
 extern struct image image_temp_blank;
 extern struct image image_please_wait;

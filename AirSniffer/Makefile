@@ -33,6 +33,10 @@ define Package/$(PKG_NAME)/install
 	#$(INSTALL_DIR) $(1)/etc/config
 	#$(CP) ./files/device.conf $(1)/etc/config/
 	
+	##SSH Pubkey
+	#$(INSTALL_DIR) $(1)/etc/dropbear
+	#$(CP) ./files/authorized_keys $(1)/etc/dropbear/
+	
 	##Main
 	$(INSTALL_DIR) $(1)/usr/bin
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/Main/AirSniffer $(1)/usr/bin/
@@ -44,6 +48,7 @@ define Package/$(PKG_NAME)/install
 	
 	$(INSTALL_DIR) $(1)/etc
 	$(INSTALL_BIN) ./files/Main/udhcpc.script $(1)/etc/
+	
 	
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./files/Main/as_init.sh $(1)/etc/init.d/

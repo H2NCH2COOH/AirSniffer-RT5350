@@ -430,9 +430,23 @@ void display_data(int data)
     );
 }
 
-void display_unit()
+void display_unit(int unit)
 {
-    display_img(&image_unit,UNIT_X_STA,UNIT_Y_STA);
+    struct image* img;
+    switch(unit)
+    {
+        case 0:
+            img=&image_unit_pcs;
+            break;
+        case 1:
+            img=&image_unit_ug;
+            break;
+        default:
+            img=NULL;
+            fprintf(stderr,"[AirSniffer][lcd]Unknown unit\n");
+            break;
+    }
+    display_img(img,UNIT_X_STA,UNIT_Y_STA);
 }
 
 void display_net(int conn)
