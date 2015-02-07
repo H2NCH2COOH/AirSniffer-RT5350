@@ -7,6 +7,7 @@
 /*---------------------------------------------------------------------------*/
 //Image define
 struct image image_welcome={"/imgs/welcome/welcome.img",LCD_W,LCD_H,NULL};
+
 struct image image_num_blank={"/imgs/numbers/blank.img",NUM_WIDTH,NUM_HEIGHT,NULL};
 struct image image_num[10]=
 {
@@ -21,9 +22,11 @@ struct image image_num[10]=
     {"/imgs/numbers/8.img",NUM_WIDTH,NUM_HEIGHT,NULL},
     {"/imgs/numbers/9.img",NUM_WIDTH,NUM_HEIGHT,NULL},
 };
+struct image image_num_minus={"/imgs/numbers/minus.img",NUM_WIDTH,NUM_HEIGHT,NULL};
 
 struct image image_net_connnected={"/imgs/net/connected.img",NET_WIDTH,NET_HEIGHT,NULL};
 struct image image_net_disconnnected={"/imgs/net/disconnected.img",NET_WIDTH,NET_HEIGHT,NULL};
+struct image image_net_blank={"/imgs/net/blank.img",NET_WIDTH,NET_HEIGHT,NULL};
 
 struct image image_bat_full={"/imgs/battery/full.img",BAT_WIDTH,BAT_HEIGHT,NULL};
 struct image image_bat_half={"/imgs/battery/half.img",BAT_WIDTH,BAT_HEIGHT,NULL};
@@ -39,13 +42,17 @@ struct image image_temp_blank={"/imgs/temp/blank.img",TEMP_WIDTH,TEMP_HEIGHT,NUL
 
 struct image image_please_wait={"/imgs/upper/please_wait.img",UPPER_WIDTH,UPPER_HEIGHT,NULL};
 
-struct image image_data_bg={"/imgs/upper/data_bg.img",UPPER_WIDTH,UPPER_HEIGHT,NULL};
+struct image image_upper_blank={"/imgs/upper/blank.img",UPPER_WIDTH,UPPER_HEIGHT,NULL};
 
 struct image image_please_setup={"/imgs/upper/please_setup.img",UPPER_WIDTH,UPPER_HEIGHT,NULL};
 
 struct image image_setup_fail={"/imgs/upper/setup_fail.img",UPPER_WIDTH,UPPER_HEIGHT,NULL};
 
 struct image image_setup_success={"/imgs/upper/setup_success.img",UPPER_WIDTH,UPPER_HEIGHT,NULL};
+
+struct image image_id_title={"/imgs/upper/id_title.img",28,24,NULL};
+
+struct image image_ip_title={"/imgs/upper/ip_title.img",28,24,NULL};
 
 struct image image_spinner[SPINNER_FRAME_COUNT]=
 {

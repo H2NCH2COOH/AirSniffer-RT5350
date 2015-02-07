@@ -307,7 +307,7 @@ void LCD_Draw_Circle(uint16_t x0,uint16_t y0,uint8_t r)
 } 
 
 /*---------------------------------------------------------------------------*/
-static void display_img(struct image* img,int x,int y)
+void display_img(struct image* img,int x,int y)
 {
     int loaded=0;
     
@@ -335,8 +335,10 @@ void display_int
     int num,
     int max_digit,
     int max,
+    int min,
     struct image* digits,
     struct image* blank,
+    struct image* minus,
     unsigned int x,
     unsigned int y
 )
@@ -344,6 +346,7 @@ void display_int
 	int i;
     int d;
     int flag=0;
+    int mf=0;
     unsigned int w;
     
     w=digits[0].width;
@@ -352,16 +355,30 @@ void display_int
     {
         num=max;
     }
-    else if(num<0) //TODO: add possible minus display
+    else if(num<min)
     {
-        num=0;
+        num=min;
+    }
+    
+    if(num<0)
+    {
+        mf=1;
+        num=-num;
     }
     
 	for(i=0;i<max_digit;++i)
     {
 		if(flag)
         {
-            display_img(blank,x,y);
+            if(mf)
+            {
+                display_img(minus,x,y);
+                mf=0;
+            }
+            else
+            {
+                display_img(blank,x,y);
+            }
             x-=w;
         }
         else
@@ -423,8 +440,10 @@ void display_data(int data)
         data,
         NUM_MAX_DIGIT,
         NUM_MAX,
+        NUM_MIN,
         image_num,
         &image_num_blank,
+        &image_num_minus,
         NUM_X_STA,
         NUM_Y_STA
     );
@@ -460,6 +479,9 @@ void display_net(int conn)
         case 0:
             img=&image_net_disconnnected;
             break;
+        default:
+            img=&image_net_blank;
+            break;
     }
     
     display_img(img,NET_X_STA,NET_Y_STA);
@@ -475,41 +497,58 @@ void display_temp(int temp)
     int i;
     struct image d[10]={0};
     struct image b={0};
+    struct image m={0};
     
+    //Load source images
     for(i=0;i<10;++i)
     {
         load_image(image_num+i);
     }
     load_image(&image_num_blank);
+    load_image(&image_num_minus);
     
+    //Resize images
     for(i=0;i<10;++i)
     {
         d[i].width=TEMP_NUM_WIDTH;
         d[i].height=TEMP_NUM_HEIGHT;
         resize_image(image_num+i,d+i);
     }
+    
     b.width=TEMP_NUM_WIDTH;
     b.height=TEMP_NUM_HEIGHT;
     resize_image(&image_num_blank,&b);
     
+    m.width=TEMP_NUM_WIDTH;
+    m.height=TEMP_NUM_HEIGHT;
+    resize_image(&image_num_minus,&m);
+    
+    //Display
     display_int
     (
         temp,
         TEMP_MAX_DIGIT,
         TEMP_MAX,
+        TEMP_MIN,
         d,
         &b,
+        &m,
         TEMP_NUM_X_STA,
         TEMP_NUM_Y_STA
     );
     
+    //Free images
     for(i=0;i<10;++i)
     {
         free_image(image_num+i);
         free_image(d+i);
     }
+    
     free_image(&image_num_blank);
     free_image(&b);
+    
+    free_image(&image_num_minus);
+    free_image(&m);
 }
 
 void display_temp_bg()
@@ -527,4 +566,79 @@ void display_spinner(int frame)
     struct image* img;
     img=(frame>=0)? (image_spinner+frame):&image_spinner_blank;
     display_img(img,SPINNER_X_STA,SPINNER_Y_STA);
+}
+
+void display_id(char* id)
+{
+    struct image d[10]={0};
+    int i=0;
+    int n,x,y;
+    
+    for(i=0;i<10;++i)
+    {
+        load_image(image_num+i);
+    }
+    
+    for(i=0;i<10;++i)
+    {
+        d[i].width=ID_WIDTH;
+        d[i].height=ID_HEIGHT;
+        resize_image(image_num+i,d+i);
+    }
+    
+    i=0;
+    while(id[i]!='\0')
+    {
+        n=id[i]-'0';
+        if(n>9||n<0)
+        {
+            n=0;
+        }
+        x=i%ID_CHAR_PER_LINE;
+        y=i/ID_CHAR_PER_LINE;
+        if(y>=ID_NUMBER_OF_LINE)
+        {
+            break;
+        }
+        //printf("[Debug]Display %d at (%d,%d)\n",n,ID_X_STA+x*ID_WIDTH,ID_Y_STA+y*ID_Y_STEP);
+        display_img(d+n,ID_X_STA+x*ID_WIDTH,ID_Y_STA+y*ID_Y_STEP);
+        ++i;
+    }
+}
+
+void display_ip(char* ip)
+{
+    struct image d[10]={0};
+    int x;
+    int n,i;
+    
+    for(i=0;i<10;++i)
+    {
+        load_image(image_num+i);
+    }
+    
+    for(i=0;i<10;++i)
+    {
+        d[i].width=IP_WIDTH;
+        d[i].height=IP_HEIGHT;
+        resize_image(image_num+i,d+i);
+    }
+    
+    x=IP_X_STA;
+    while(*ip!='\0')
+    {
+        if(*ip=='.')
+        {
+            LCD_Fill(x,IP_Y_STA+IP_HEIGHT-2,x+1,IP_Y_STA+IP_HEIGHT-1,WHITE);
+            x+=2;
+        }
+        else
+        {
+            n=*ip-'0';
+            display_img(d+n,x,IP_Y_STA);
+            x+=IP_WIDTH;
+        }
+        
+        ++ip;
+    }
 }

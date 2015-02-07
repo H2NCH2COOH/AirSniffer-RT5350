@@ -42,11 +42,9 @@ static int _panic_=0;
     #define feed_dog() write(watchdog,"f",1)
 #endif
 
-static int wifi_setup_flag=0;
+static char buff[128];
 
 static int battery_state=0;
-
-static int button_front=0;
 
 static int count=0;
 static int sensor_low=0;
@@ -60,13 +58,23 @@ static int data_send_counter=0;
 static const char* KEY_RAW_DATA="pm25raw";
 static const char* KEY_TEMP="temp";
 
+static int spinner_count=0;
 static int spinner_frame=0;
 
 static int debug;
 
 static int* timers[TIMERS_SIZE]={0};
 
-static int displaying_unit=UNIT_TYPE_PCS;
+static int fb_pressing=0;
+static int fb_timer=0;
+
+static int displaying_unit=0;
+
+static int state=STATE_PM25;
+
+static double calibration_m=1;
+static double calibration_a=0;
+
 /*---------------------------------------------------------------------------*
  * Prototypes
  *---------------------------------------------------------------------------*/
@@ -79,8 +87,8 @@ static void display(int type,int data);
 static void add_gpio(int p,int interval,int cooldown);
 static void poll_gpio();
 static void gpio_event_handler(int pin,int level);
-int add_timer(int* timer);
-void remove_timer(int* timer);
+static int add_timer(int* timer);
+static void remove_timer(int* timer);
 /*---------------------------------------------------------------------------*
  * GPIO event functions
  *---------------------------------------------------------------------------*/
@@ -196,15 +204,71 @@ static void gpio_event_handler(int pin,int level)
             }
             break;
         case GPIO_PIN_BACK_BUTTON:
-            if((!wifi_setup_flag)&&(level==0))
+            if
+            (
+                (state==STATE_PM25)&&
+                (level==0)
+            )
             {
-                wifi_setup_flag=1;
+                state=STATE_WIFI_SETUP;
             }
             break;
         case GPIO_PIN_FRONT_BUTTON:
-            if((!wifi_setup_flag)&&(level==0))
+            if
+            (
+                (state!=STATE_WIFI_SETUP)&&
+                (fb_pressing||fb_timer==0)
+            )
             {
-                displaying_unit=(displaying_unit==UNIT_TYPE_PCS)? UNIT_TYPE_UG:UNIT_TYPE_PCS;
+                if(fb_pressing==0&&level==0)
+                {
+                    //Pressed
+                    fb_pressing=1;
+                    fb_timer=FB_TIMER_LONG;
+                }
+                else if(fb_pressing==1&&level==1)
+                {
+                    //Released
+                    fb_pressing=0;
+                    //printf("[Debug]fb_timer=%d",fb_timer);
+                    if(fb_timer>0)
+                    {
+                        //Short press
+                        printf("[AirSniffer][Main]Front button short press\n");
+                        fb_timer=0;
+                        switch(state)
+                        {
+                            case STATE_PM25:
+                                displaying_unit=
+                                    (displaying_unit==UNIT_TYPE_PCS)?
+                                    UNIT_TYPE_UG:UNIT_TYPE_PCS;
+                                break;
+                            case STATE_ID:
+                                state=STATE_IP;
+                                break;
+                            case STATE_IP:
+                                state=STATE_ID;
+                                break;
+                        }
+                    }
+                    else
+                    {
+                        //Long press
+                        printf("[AirSniffer][Main]Front button long press\n");
+                        switch(state)
+                        {
+                            case STATE_PM25:
+                                state=STATE_ID;
+                                break;
+                            case STATE_ID:
+                            case STATE_IP:
+                                state=STATE_PM25;
+                                break;
+                        }
+                    }
+                    
+                    fb_timer=FB_TIMER_CD;
+                }
             }
             break;
         default:
@@ -214,7 +278,7 @@ static void gpio_event_handler(int pin,int level)
 /*---------------------------------------------------------------------------*
  * Add/remove timer to timers
  *---------------------------------------------------------------------------*/
-int add_timer(int* timer)
+static int add_timer(int* timer)
 {
     int i;
     for(i=0;i<TIMERS_SIZE;++i)
@@ -227,7 +291,7 @@ int add_timer(int* timer)
     }
     return -1;
 }
-void remove_timer(int* timer)
+static void remove_timer(int* timer)
 {
     int i;
     for(i=0;i<TIMERS_SIZE;++i)
@@ -245,41 +309,42 @@ void remove_timer(int* timer)
  *---------------------------------------------------------------------------*/
 static void main_sigalrm_handler(int signal)
 {
-    static int spinner_count=0;
-    
     double raw;
     int i;
     
-    //Sensor
-    ++count;
-    if(gpio_get_value(GPIO_PIN_SENSOR)==0)
-    {
-        ++sensor_low;
-    }
-    if(count>=SENSOR_CALC_INTERVAL)
-    {
-        raw=(double)sensor_low/count;
+    if(state==STATE_PM25)
+    {   
+        //Sensor
+        ++count;
+        if(gpio_get_value(GPIO_PIN_SENSOR)==0)
+        {
+            ++sensor_low;
+        }
+        if(count>=SENSOR_CALC_INTERVAL)
+        {
+            raw=(double)sensor_low/count;
+            
+            count=0;
+            sensor_low=0;
+            
+            printf("[AirSniffer][Main]New raw data: %f\n",raw);
+            *new_data_ptr=raw;
+            new_data=1;
+        }
         
-        count=0;
-        sensor_low=0;
-        
-        printf("[AirSniffer][Main]New raw data: %f\n",raw);
-        *new_data_ptr=raw;
-        new_data=1;
-    }
-    
-    //Spinner
-    ++spinner_count;
-    if(spinner_count>=SPINNER_FRAME_LEN)
-    {
-        spinner_count=0;
-        spinner_frame=(spinner_frame+1)%SPINNER_FRAME_COUNT;
+        //Spinner
+        ++spinner_count;
+        if(spinner_count>=SPINNER_FRAME_LEN)
+        {
+            spinner_count=0;
+            spinner_frame=(spinner_frame+1)%SPINNER_FRAME_COUNT;
+        }
     }
     
     //Timer
     for(i=0;i<TIMERS_SIZE;++i)
     {
-        if(timers[i]&&*(timers[i]))
+        if(timers[i]&&(*(timers[i])>0))
         {
             --*(timers[i]);
         }
@@ -295,10 +360,7 @@ static int wifi_setup()
 {
     int fd,ret=0;
     struct pollfd pfd[1];
-    char buff[64];
     FILE* file;
-    
-    wifi_setup_flag=1;
     
     printf("[AirSniffer][Main]Start wifi setup\n");
     
@@ -447,8 +509,6 @@ succ:
     feed_dog();
 #endif
     
-    wifi_setup_flag=0;
-    
     return ret;
 }
 /*---------------------------------------------------------------------------*
@@ -525,7 +585,7 @@ static void display(int type,int data)
         case DISPLAY_TYPE_DATA:
             if(!current_is_data)
             {
-                display_upper(&image_data_bg);
+                display_upper(&image_upper_blank);
                 display_unit(displaying_unit);
                 current_is_data=1;
             }
@@ -571,6 +631,18 @@ static void display(int type,int data)
         case DISPLAY_TYPE_SPINNER:
             display_spinner(data);
             break;
+        case DISPLAY_TYPE_ID:
+            display_upper(&image_upper_blank);
+            display_upper(&image_id_title);
+            get_config(CONFIG_KEY_DEVICE_ID,buff);
+            display_id(buff);
+            break;
+        case DISPLAY_TYPE_IP:
+            display_upper(&image_upper_blank);
+            display_upper(&image_ip_title);
+            read_ip(buff);
+            display_ip(buff);
+            break; 
         default:
             break;
     }
@@ -607,7 +679,7 @@ static void gpio_init()
     //Front button
     gpio_request(GPIO_PIN_FRONT_BUTTON,NULL);
     gpio_direction_input(GPIO_PIN_FRONT_BUTTON);
-    add_gpio(GPIO_PIN_FRONT_BUTTON,10,1000);
+    add_gpio(GPIO_PIN_FRONT_BUTTON,10,0);
 }
 /*---------------------------------------------------------------------------*
  * SIGINT handler
@@ -628,8 +700,7 @@ void sigint_handler()
 int read_temp()
 {
     FILE* f;
-    char buff[32];
-    int t,r;
+    int t,r,s=1;
     
     //return rand()%40;
     
@@ -650,6 +721,11 @@ int read_temp()
     }
     
     t=atoi(buff);
+    if(t<0)
+    {
+        t=-t;
+        s=-1;
+    }
     t/=100;
     r=t%10;
     t/=10;
@@ -657,8 +733,33 @@ int read_temp()
     {
         ++t;
     }
+    t*=s;
     printf("[AirSniffer][Main]Read temperature: %d\n",t);
     return t;
+}
+/*---------------------------------------------------------------------------*
+ * Read ip addr
+ *---------------------------------------------------------------------------*/
+void read_ip(char* buf)
+{
+    FILE* f;
+    
+    buf[0]='\0';
+    f=popen("ifconfig " STA_DEV " | awk '/inet addr/{print substr($2,6)}'","r");
+    if(f==NULL)
+    {
+        fprintf(stderr,"[AirSniffer][Main]Error read temperature\n");
+        return TEMP_NO_DEVICE;
+    }
+    fgets(buf,128,f);
+    pclose(f);
+    
+    if(buf[strlen(buf)-1]=='\n')
+    {
+        buf[strlen(buf)-1]='\0';
+    }
+    
+    printf("[AirSniffer][Main]Read ip: %s\n",buf);
 }
 /*---------------------------------------------------------------------------*
  * Main
@@ -666,8 +767,6 @@ int read_temp()
 int main(int argc,char* argv[])
 {
     FILE* file;
-    char buf[128];
-    char id[128];
     char feed_id[128];
     char api_key[128];
     char c;
@@ -679,20 +778,15 @@ int main(int argc,char* argv[])
     int ret;
     int i,t;
     double raw;
-    double current_display_data;
+    double current_display_data=-1;
     int current_displaying_unit;
+    int current_state;
     int converted;
     int last_battery_state;
     struct data_points* data;
     struct xively_data_points* xively_data;
     struct itimerval itv;
     int last_spinner_frame;
-    
-    struct image d[10]={0};
-    struct image b={0};
-    
-    double r;
-    int w,h;
     
     printf("[AirSniffer][Main]Start\n");
     
@@ -731,10 +825,34 @@ int main(int argc,char* argv[])
     //Add default configs to old version config file
     flag=0;
     
-    get_config(CONFIG_KEY_UPLOAD,buf);
-    if(buf[0]=='\0')
+    get_config(CONFIG_KEY_UPLOAD,buff);
+    if(buff[0]=='\0')
     {
         set_config(CONFIG_KEY_UPLOAD,"xively");
+        flag=1;
+    }
+    get_config(CONFIG_KEY_TELNET,buff);
+    if(buff[0]=='\0')
+    {
+        set_config(CONFIG_KEY_TELNET,"n");
+        flag=1;
+    }
+    get_config(CONFIG_KEY_UNIT,buff);
+    if(buff[0]=='\0')
+    {
+        set_config(CONFIG_KEY_UNIT,"pcs");
+        flag=1;
+    }
+    get_config(CONFIG_KEY_CALIBRATION_M,buff);
+    if(buff[0]=='\0')
+    {
+        set_config(CONFIG_KEY_CALIBRATION_M,"1");
+        flag=1;
+    }
+    get_config(CONFIG_KEY_CALIBRATION_A,buff);
+    if(buff[0]=='\0')
+    {
+        set_config(CONFIG_KEY_CALIBRATION_A,"0");
         flag=1;
     }
     
@@ -743,6 +861,27 @@ int main(int argc,char* argv[])
     {
         dump_config(CONFIG_FILE);
     }
+    
+    //Read display unit
+    get_config(CONFIG_KEY_UNIT,buff);
+    if(strcmp(buff,"pcs")==0)
+    {
+        displaying_unit=UNIT_TYPE_PCS;
+    }
+    else if(strcmp(buff,"ug")==0)
+    {
+        displaying_unit=UNIT_TYPE_UG;
+    }
+    
+    //Read calibration
+    get_config(CONFIG_KEY_CALIBRATION_M,buff);
+    calibration_m=atof(buff);
+    if(calibration_m<=0)
+    {
+        calibration_m=1;
+    }
+    get_config(CONFIG_KEY_CALIBRATION_A,buff);
+    calibration_a=atof(buff);
     
     display(DISPLAY_TYPE_PLEASE_WAIT,0);
     
@@ -754,6 +893,9 @@ int main(int argc,char* argv[])
     last_battery_state=-1;
     last_spinner_frame=-1;
     current_displaying_unit=displaying_unit;
+    current_state=state;
+    
+    add_timer(&fb_timer);
     
     //Start timer
     start_timer(NULL);
@@ -765,27 +907,75 @@ int main(int argc,char* argv[])
 #endif
         debug%=100;
         
-        //WiFi Setup Task
-        if(wifi_setup_flag)
+        //Switch state
+        if(current_state!=state)
         {
-            //Stop timer
             stop_timer(NULL);
             
-            count=0;
-            sensor_low=0;
+            printf("[AirSniffer][Main]State change %d->%d\n",current_state,state);
             
-            wifi_setup();
+            switch(state)
+            {
+                case STATE_PM25:
+                    display(DISPLAY_TYPE_PLEASE_WAIT,0);
+                    break;
+                case STATE_WIFI_SETUP:
+                    //Clear data spinner battery wifi
+                    count=0;
+                    sensor_low=0;
+                    current_display_data=-1;
+                    
+                    display(DISPLAY_TYPE_SPINNER,-1);
+                    spinner_count=0;
+                    spinner_frame=0;
+                    last_spinner_frame=-1;
+                    
+                    display(DISPLAY_TYPE_BATTERY,'b');
+                    last_battery_state=-1;
+                    
+                    display(DISPLAY_TYPE_WIFI_CONN,-1);
+                    
+                    wifi_setup();
+                    
+                    display(DISPLAY_TYPE_PLEASE_WAIT,0);
+                    
+                    state=STATE_PM25;
+                    break;
+                case STATE_ID:
+                    if(current_state==STATE_PM25)
+                    {
+                        //Clear data and spinner
+                        count=0;
+                        sensor_low=0;
+                        current_display_data=-1;
+                        
+                        display(DISPLAY_TYPE_SPINNER,-1);
+                        spinner_count=0;
+                        spinner_frame=0;
+                        last_spinner_frame=-1;
+                        
+                        display(DISPLAY_TYPE_WIFI_CONN,-1);
+                    }
+                    
+                    display(DISPLAY_TYPE_ID,0);
+                    break;
+                case STATE_IP:
+                    display(DISPLAY_TYPE_IP,0);
+                    break;
+            }
             
-            display(DISPLAY_TYPE_SPINNER,-1);
-            last_battery_state=-1;
-            display(DISPLAY_TYPE_PLEASE_WAIT,0);
-            
-            //Restart timer
+            current_state=state;
             start_timer(NULL);
         }
         
+        if(fb_pressing&&!fb_timer)
+        {
+            //Timer expires
+            gpio_event_handler(GPIO_PIN_FRONT_BUTTON,1);
+        }
+        
         //Spinner
-        if(last_spinner_frame!=spinner_frame)
+        if(state==STATE_PM25&&last_spinner_frame!=spinner_frame)
         {
             last_spinner_frame=spinner_frame;
             display(DISPLAY_TYPE_SPINNER,spinner_frame);
@@ -816,8 +1006,8 @@ int main(int argc,char* argv[])
             last_battery_state=battery_state;
         }
         
-        //New Data Task
-        if(new_data)
+        //New Data
+        if(state==STATE_PM25&&new_data)
         {
             debug+=200;
             
@@ -838,99 +1028,115 @@ int main(int argc,char* argv[])
                 new_data_ptr=sensor_data;
             }
             
-            if(!wifi_setup_flag)
+            raw=0;
+            for(i=0;i<current_data_number;++i)
             {
-                raw=0;
-                for(i=0;i<current_data_number;++i)
-                {
-                    raw+=sensor_data[i];
-                }
-                raw/=current_data_number;
-                converted=data_convert(raw,current_displaying_unit);
-                current_display_data=raw;
-                
+                raw+=sensor_data[i];
+            }
+            raw/=current_data_number;
+            
+            //Apply calibration
+            raw*=calibration_m;
+            raw+=calibration_a;
+            
+            converted=data_convert(raw,current_displaying_unit);
+            current_display_data=raw;
+            
 #if PIN_VER==5
-                //Read temperature
-                stop_timer(NULL);
-                t=read_temp();
-                display(DISPLAY_TYPE_TEMP,t);
-                start_timer(NULL);
+            //Read temperature
+            stop_timer(NULL);
+            t=read_temp();
+            display(DISPLAY_TYPE_TEMP,t);
+            start_timer(NULL);
 #endif
+            
+            display(DISPLAY_TYPE_DATA,converted);
+            
+            if(++data_send_counter>=DATA_SEND_INTERVAL)
+            {
+                data_send_counter=0;
                 
-                display(DISPLAY_TYPE_DATA,converted);
+                printf("[AirSniffer][Main]Sending new data\n");
                 
-                if(++data_send_counter>=DATA_SEND_INTERVAL)
+                //Stop timer
+                stop_timer(NULL);
+                
+                debug+=800;
+                
+                get_config(CONFIG_KEY_UPLOAD,buff);
+                if(strcmp(buff,"none")!=0)
                 {
-                    data_send_counter=0;
-                    
-                    printf("[AirSniffer][Main]Sending new data\n");
-                    
-                    //Stop timer
-                    stop_timer(NULL);
-                    
-                    debug+=800;
-                    
-                    get_config(CONFIG_KEY_UPLOAD,buf);
-                    if(strcmp(buf,"none")!=0)
+                    if(strcmp(buff,"aliyun")==0)
                     {
-                        if(strcmp(buf,"aliyun")==0)
+                        sprintf(buff,"%10f",raw);
+                        data=append_data_point(NULL,KEY_RAW_DATA,buff);
+                        if(t!=TEMP_NO_DEVICE)
                         {
-                            sprintf(buf,"%10f",raw);
-                            data=append_data_point(NULL,KEY_RAW_DATA,buf);
-                            if(t!=TEMP_NO_DEVICE)
-                            {
-                                sprintf(buf,"%10d",t);
-                                data=append_data_point(data,KEY_TEMP,buf);
-                            }
-                            get_config(CONFIG_KEY_DEVICE_ID,id);
-                            ret=upload(id,data);
-                            free_data_points(data);
+                            sprintf(buff,"%10d",t);
+                            data=append_data_point(data,KEY_TEMP,buff);
                         }
-                        else
-                        {
-                            sprintf(buf,"%10f",raw);
-                            xively_data=xively_append_data_point(NULL,KEY_RAW_DATA,buf);
-                            if(t!=TEMP_NO_DEVICE)
-                            {
-                                sprintf(buf,"%10d",t);
-                                xively_data=xively_append_data_point(xively_data,KEY_TEMP,buf);
-                            }
-                            get_config(CONFIG_KEY_FEED_ID,feed_id);
-                            get_config(CONFIG_KEY_API_KEY,api_key);
-                            ret=xively_update_feed(feed_id,api_key,xively_data);
-                            xively_free_data_points(xively_data);
-                        }
-
-                        if(ret!=0)
-                        {
-                            //Upload failed
-                            printf("[AirSniffer][Main]Disconnected\n");
-                            display(DISPLAY_TYPE_WIFI_CONN,0);
-                        }
-                        else
-                        {
-                            //Upload success
-                            printf("[AirSniffer][Main]New data sent\n");
-                            printf("[AirSniffer][Main]Connected\n");
-                            display(DISPLAY_TYPE_WIFI_CONN,1);
-                        }
+                        get_config(CONFIG_KEY_DEVICE_ID,buff);
+                        ret=upload(buff,data);
+                        free_data_points(data);
                     }
-                    
-                    //Restart timer
-                    start_timer(NULL);
+                    else
+                    {
+                        sprintf(buff,"%10f",raw);
+                        xively_data=xively_append_data_point(NULL,KEY_RAW_DATA,buff);
+                        if(t!=TEMP_NO_DEVICE)
+                        {
+                            sprintf(buff,"%10d",t);
+                            xively_data=xively_append_data_point(xively_data,KEY_TEMP,buff);
+                        }
+                        get_config(CONFIG_KEY_FEED_ID,feed_id);
+                        get_config(CONFIG_KEY_API_KEY,api_key);
+                        ret=xively_update_feed(feed_id,api_key,xively_data);
+                        xively_free_data_points(xively_data);
+                    }
+
+                    if(ret!=0)
+                    {
+                        //Upload failed
+                        printf("[AirSniffer][Main]Disconnected\n");
+                        display(DISPLAY_TYPE_WIFI_CONN,0);
+                    }
+                    else
+                    {
+                        //Upload success
+                        printf("[AirSniffer][Main]New data sent\n");
+                        printf("[AirSniffer][Main]Connected\n");
+                        display(DISPLAY_TYPE_WIFI_CONN,1);
+                    }
                 }
+                
+                //Restart timer
+                start_timer(NULL);
             }
         }
         
         //Change unit
-        if(displaying_unit!=current_displaying_unit)
+        if
+        (
+            state==STATE_PM25&&
+            displaying_unit!=current_displaying_unit
+        )
         {
-            current_displaying_unit=displaying_unit;
-            stop_timer(NULL);
-            display(DISPLAY_TYPE_UNIT,0);
-            converted=data_convert(current_display_data,displaying_unit);
-            display(DISPLAY_TYPE_DATA,converted);
-            start_timer(NULL);
+            if(current_display_data>0)
+            {
+                current_displaying_unit=displaying_unit;
+                stop_timer(NULL);
+                display(DISPLAY_TYPE_UNIT,0);
+                converted=data_convert(current_display_data,displaying_unit);
+                display(DISPLAY_TYPE_DATA,converted);
+                sprintf(buff,(displaying_unit==UNIT_TYPE_PCS)? "pcs":"ug");
+                set_config(CONFIG_KEY_UNIT,buff);
+                dump_config(CONFIG_FILE);
+                start_timer(NULL);
+            }
+            else
+            {
+                displaying_unit=current_displaying_unit;
+            }
         }
         
         debug+=400;

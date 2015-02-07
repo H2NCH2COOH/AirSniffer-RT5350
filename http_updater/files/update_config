@@ -1,6 +1,7 @@
 #!/bin/sh
 
 APP=AirSniffer
+UPDATER=cfg_updater
 CONFIG_FILE=/etc/config/device.conf
 
 eval $(echo "$QUERY_STRING"|awk -F'&' '{for(i=1;i<=NF;i++){print $i}}')
@@ -19,9 +20,10 @@ if [ "$?" == "0" ]; then
     #Success
     killall $APP
     
-    tr -d '\015' <$file >$CONFIG_FILE
+    tr -d '\015' <$file >new.conf
+    rm $file
     
-    source $CONFIG_FILE
+    source new.conf
     
     if [ -n "$mac" ]; then
         cat /dev/mtd2 > /hexd
@@ -41,6 +43,14 @@ if [ "$?" == "0" ]; then
         mtd write /hexd factory
         rm /hexd
     fi
+    
+    if [ "$update" == "on" ]; then
+        cfg_updater new.conf $CONFIG_FILE
+    else
+        cat new.conf > $CONFIG_FILE
+    fi
+    
+    rm new.conf
     
     (sleep 10; Welcome; reboot)&
     
@@ -74,5 +84,3 @@ else
     </html>
 EOF
 fi
-
-rm $file

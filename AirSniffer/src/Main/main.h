@@ -12,7 +12,6 @@
 #define ID_FILE "/etc/config/device.id"
 #define CONFIG_FILE "/etc/config/device.conf"
 
-#define AP_DEV "wlan1"
 #define HOSTAPD_CONFIG_FILE "/etc/config/hostapd.conf"
 
 #define STA_DEV "wlan0"
@@ -47,12 +46,22 @@
 #define DISPLAY_TYPE_WIFI_CONN      8
 #define DISPLAY_TYPE_TEMP           9
 #define DISPLAY_TYPE_SPINNER        10
+#define DISPLAY_TYPE_ID             11
+#define DISPLAY_TYPE_IP             12
 
 #define TEMP_NO_DEVICE      -128
 
 #define UNIT_TYPE_PCS   0
 #define UNIT_TYPE_UG    1
 
-#define TIMERS_SIZE      10
+#define TIMERS_SIZE     10
+
+#define FB_TIMER_LONG   6000
+#define FB_TIMER_CD     1000
+
+#define STATE_PM25          0
+#define STATE_ID            1
+#define STATE_IP            2
+#define STATE_WIFI_SETUP    3
 
 #endif /* _MAIN_H_ */

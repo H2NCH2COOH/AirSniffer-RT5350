@@ -18,8 +18,9 @@ define Package/$(PKG_NAME)/description
 	Updater based on http
 endef
 
-define Build/Compile
-	echo "No need to compile"
+define Build/Prepare
+	mkdir -p $(PKG_BUILD_DIR)
+	$(CP) -r ./src/* $(PKG_BUILD_DIR)/
 endef
 
 define Package/$(PKG_NAME)/install
@@ -30,6 +31,9 @@ define Package/$(PKG_NAME)/install
 	$(INSTALL_DIR) $(1)/www/cgi-bin
 	$(INSTALL_BIN) ./files/update $(1)/www/cgi-bin/
 	$(INSTALL_BIN) ./files/update_config $(1)/www/cgi-bin/
+	
+	$(INSTALL_DIR) $(1)/usr/bin
+	$(INSTALL_BIN) $(PKG_BUILD_DIR)/cfg_updater $(1)/usr/bin/
 endef
 
 $(eval $(call BuildPackage,$(PKG_NAME)))

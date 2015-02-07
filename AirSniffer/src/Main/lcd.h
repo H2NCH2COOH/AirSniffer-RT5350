@@ -68,6 +68,7 @@ void LCD_ShowImageRaw(uint8_t xsta, uint8_t ysta, uint8_t xlen, uint8_t ylen, co
 /*---------------------------------------------------------------------------*/
 void display_init();
 
+void display_img(struct image* img,int x,int y);
 void display_welcome();
 void display_battery(char state);
 void display_data(int num);
@@ -78,7 +79,9 @@ void display_temp(int temp);
 void display_temp_bg();
 void display_temp_blank();
 void display_spinner(int frame);
-void display_int(int num,int max_digit,int max,struct image* digits,struct image* blank,unsigned int x,unsigned int y);
+void display_int(int num,int max_digit,int max,int min,struct image* digits,struct image* blank,struct image* minus,unsigned int x,unsigned int y);
+void display_id(char* id);
+void display_ip(char* ip);
 /*---------------------------------------------------------------------------*/
 
 #endif
