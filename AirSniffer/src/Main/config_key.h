@@ -8,7 +8,5 @@
 #define CONFIG_KEY_UPLOAD           "upload"
 #define CONFIG_KEY_TELNET           "telnet"
 #define CONFIG_KEY_UNIT             "unit"
-#define CONFIG_KEY_CALIBRATION_M    "calibration_m"
-#define CONFIG_KEY_CALIBRATION_A    "calibration_a"
 
 #endif /* _AS_CONFIG_KEY_H_ */

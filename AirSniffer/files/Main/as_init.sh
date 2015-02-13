@@ -38,6 +38,10 @@ telnet=y
 EOF
     fi
     
+    if [ ! -f /www/device.conf ]; then
+        ln -s $DEV_CONFIG /www/device.conf
+    fi
+    
     if [ ! x$(cat /etc/TZ) == "xBEJ-8" ]; then
         echo "BEJ-8" > /tmp/TZ
     fi

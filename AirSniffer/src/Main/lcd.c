@@ -642,3 +642,49 @@ void display_ip(char* ip)
         ++ip;
     }
 }
+
+void display_time(char* time)
+{
+    int x,i;
+    struct image* img;
+    
+    //Check time format
+    if(!
+    (
+        (
+            (time[0]>='0'&&time[0]<='9')||
+            time[0]==' '
+            
+        )&&
+        time[1]>='0'&&time[1]<='9'&&
+        time[2]==':'&&
+        time[3]>='0'&&time[3]<='9'&&
+        time[4]>='0'&&time[4]<='9'
+    ))
+    {
+        
+        fprintf(stderr,"[AirSniffer][LCD]Wrong time format: %s\n",time);
+        return;
+    }
+    
+    x=TIME_X_STA;
+    
+    for(i=0;i<5;++i)
+    {
+        if(time[i]>='0'&&time[i]<='9')
+        {
+            img=image_num+(time[i]-'0');
+        }
+        else if(time[i]==' ')
+        {
+            img=&image_num_blank;
+        }
+        else if(time[i]==':')
+        {
+            img=&image_time_colon;
+        }
+        
+        display_img(img,x,TIME_Y_STA);
+        x+=img->width;
+    }
+}

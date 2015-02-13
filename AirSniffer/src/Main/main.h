@@ -48,6 +48,7 @@
 #define DISPLAY_TYPE_SPINNER        10
 #define DISPLAY_TYPE_ID             11
 #define DISPLAY_TYPE_IP             12
+#define DISPLAY_TYPE_TIME           13
 
 #define TEMP_NO_DEVICE      -128
 
@@ -63,5 +64,6 @@
 #define STATE_ID            1
 #define STATE_IP            2
 #define STATE_WIFI_SETUP    3
+#define STATE_TIME          4
 
 #endif /* _MAIN_H_ */

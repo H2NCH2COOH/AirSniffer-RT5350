@@ -14,6 +14,7 @@
 #include <poll.h>
 #include <signal.h>
 #include <sys/time.h>
+#include <time.h>
 
 //#include <ugpio/ugpio.h>
 
@@ -72,9 +73,6 @@ static int displaying_unit=0;
 
 static int state=STATE_PM25;
 
-static double calibration_m=1;
-static double calibration_a=0;
-
 /*---------------------------------------------------------------------------*
  * Prototypes
  *---------------------------------------------------------------------------*/
@@ -89,6 +87,8 @@ static void poll_gpio();
 static void gpio_event_handler(int pin,int level);
 static int add_timer(int* timer);
 static void remove_timer(int* timer);
+static int read_temp();
+static void read_ip(char* buf);
 /*---------------------------------------------------------------------------*
  * GPIO event functions
  *---------------------------------------------------------------------------*/
@@ -206,7 +206,10 @@ static void gpio_event_handler(int pin,int level)
         case GPIO_PIN_BACK_BUTTON:
             if
             (
-                (state==STATE_PM25)&&
+                (
+                    state==STATE_PM25||
+                    state==STATE_TIME
+                )&&
                 (level==0)
             )
             {
@@ -239,15 +242,31 @@ static void gpio_event_handler(int pin,int level)
                         switch(state)
                         {
                             case STATE_PM25:
-                                displaying_unit=
-                                    (displaying_unit==UNIT_TYPE_PCS)?
-                                    UNIT_TYPE_UG:UNIT_TYPE_PCS;
+                                if(displaying_unit==UNIT_TYPE_PCS)
+                                {
+                                    displaying_unit=UNIT_TYPE_UG;
+                                }
+                                else
+                                {
+                                    if(time(NULL)>63072000)
+                                    {
+                                        state=STATE_TIME;
+                                    }
+                                    else
+                                    {
+                                        displaying_unit=UNIT_TYPE_PCS;
+                                    }
+                                }
                                 break;
                             case STATE_ID:
                                 state=STATE_IP;
                                 break;
                             case STATE_IP:
                                 state=STATE_ID;
+                                break;
+                            case STATE_TIME:
+                                state=STATE_PM25;
+                                displaying_unit=UNIT_TYPE_PCS;
                                 break;
                         }
                     }
@@ -258,6 +277,7 @@ static void gpio_event_handler(int pin,int level)
                         switch(state)
                         {
                             case STATE_PM25:
+                            case STATE_TIME:
                                 state=STATE_ID;
                                 break;
                             case STATE_ID:
@@ -312,7 +332,11 @@ static void main_sigalrm_handler(int signal)
     double raw;
     int i;
     
-    if(state==STATE_PM25)
+    if
+    (
+        state==STATE_PM25||
+        state==STATE_TIME
+    )
     {   
         //Sensor
         ++count;
@@ -568,8 +592,12 @@ static void display(int type,int data)
 {
     static int current_is_data=0;
     static int current_has_temp=0;
+    static int current_is_time=0;
     
     struct itimerval itv;
+    
+    time_t t;
+    struct tm *lt;
     
     stop_timer(&itv);
     
@@ -577,30 +605,37 @@ static void display(int type,int data)
     {
         case DISPLAY_TYPE_PLEASE_WAIT:
             current_is_data=0;
+            current_is_time=0;
             display_upper(&image_please_wait);
             break;
         case DISPLAY_TYPE_UNIT:
             display_unit(displaying_unit);
             break;
         case DISPLAY_TYPE_DATA:
+            current_is_time=0;
+            
             if(!current_is_data)
             {
                 display_upper(&image_upper_blank);
                 display_unit(displaying_unit);
                 current_is_data=1;
             }
+            
             display_data(data);
             break;
         case DISPLAY_TYPE_PLEASE_SETUP:
             current_is_data=0;
+            current_is_time=0;
             display_upper(&image_please_setup);
             break;
         case DISPLAY_TYPE_SETUP_SUCC:
             current_is_data=0;
+            current_is_time=0;
             display_upper(&image_setup_success);
             break;
         case DISPLAY_TYPE_SETUP_FAIL:
             current_is_data=0;
+            current_is_time=0;
             display_upper(&image_setup_fail);
             break;
         case DISPLAY_TYPE_BATTERY:
@@ -632,17 +667,41 @@ static void display(int type,int data)
             display_spinner(data);
             break;
         case DISPLAY_TYPE_ID:
+            current_is_data=0;
+            current_is_time=0;
             display_upper(&image_upper_blank);
             display_upper(&image_id_title);
             get_config(CONFIG_KEY_DEVICE_ID,buff);
             display_id(buff);
             break;
         case DISPLAY_TYPE_IP:
+            current_is_data=0;
+            current_is_time=0;
             display_upper(&image_upper_blank);
             display_upper(&image_ip_title);
             read_ip(buff);
             display_ip(buff);
-            break; 
+            break;
+        case DISPLAY_TYPE_TIME:
+            current_is_data=0;
+            
+            if(!current_is_time)
+            {
+                display_upper(&image_upper_blank);
+                current_is_time=1;
+            }
+            
+            t=time(NULL);
+            lt=localtime(&t);
+            if(lt==NULL)
+            {
+                fprintf(stderr,"[AirSniffer][Main]localtime returns NULL\n");
+                break;
+            }
+            strftime(buff,sizeof(buff),"%k:%M",lt);
+            printf("[AirSniffer][Main]Format time: %s\n",buff);
+            display_time(buff);
+            break;
         default:
             break;
     }
@@ -684,7 +743,7 @@ static void gpio_init()
 /*---------------------------------------------------------------------------*
  * SIGINT handler
  *---------------------------------------------------------------------------*/
-void sigint_handler()
+static void sigint_handler()
 {
     struct itimerval itv;
     
@@ -697,7 +756,7 @@ void sigint_handler()
 /*---------------------------------------------------------------------------*
  * Read temperature
  *---------------------------------------------------------------------------*/
-int read_temp()
+static int read_temp()
 {
     FILE* f;
     int t,r,s=1;
@@ -740,7 +799,7 @@ int read_temp()
 /*---------------------------------------------------------------------------*
  * Read ip addr
  *---------------------------------------------------------------------------*/
-void read_ip(char* buf)
+static void read_ip(char* buf)
 {
     FILE* f;
     
@@ -748,8 +807,8 @@ void read_ip(char* buf)
     f=popen("ifconfig " STA_DEV " | awk '/inet addr/{print substr($2,6)}'","r");
     if(f==NULL)
     {
-        fprintf(stderr,"[AirSniffer][Main]Error read temperature\n");
-        return TEMP_NO_DEVICE;
+        fprintf(stderr,"[AirSniffer][Main]Error read ip\n");
+        return;
     }
     fgets(buf,128,f);
     pclose(f);
@@ -787,6 +846,7 @@ int main(int argc,char* argv[])
     struct xively_data_points* xively_data;
     struct itimerval itv;
     int last_spinner_frame;
+    time_t time;
     
     printf("[AirSniffer][Main]Start\n");
     
@@ -803,6 +863,10 @@ int main(int argc,char* argv[])
     
     //Don't panic, for now
     _panic_=0;
+    
+    //Set time to Epoch
+    time=0;
+    stime(&time);
     
     //Set SIGINT handler
     signal(SIGINT,sigint_handler);
@@ -843,18 +907,6 @@ int main(int argc,char* argv[])
         set_config(CONFIG_KEY_UNIT,"pcs");
         flag=1;
     }
-    get_config(CONFIG_KEY_CALIBRATION_M,buff);
-    if(buff[0]=='\0')
-    {
-        set_config(CONFIG_KEY_CALIBRATION_M,"1");
-        flag=1;
-    }
-    get_config(CONFIG_KEY_CALIBRATION_A,buff);
-    if(buff[0]=='\0')
-    {
-        set_config(CONFIG_KEY_CALIBRATION_A,"0");
-        flag=1;
-    }
     
     //Save config to file
     if(flag)
@@ -863,7 +915,7 @@ int main(int argc,char* argv[])
     }
     
     //Read display unit
-    get_config(CONFIG_KEY_UNIT,buff);
+    /*get_config(CONFIG_KEY_UNIT,buff);
     if(strcmp(buff,"pcs")==0)
     {
         displaying_unit=UNIT_TYPE_PCS;
@@ -871,17 +923,8 @@ int main(int argc,char* argv[])
     else if(strcmp(buff,"ug")==0)
     {
         displaying_unit=UNIT_TYPE_UG;
-    }
-    
-    //Read calibration
-    get_config(CONFIG_KEY_CALIBRATION_M,buff);
-    calibration_m=atof(buff);
-    if(calibration_m<=0)
-    {
-        calibration_m=1;
-    }
-    get_config(CONFIG_KEY_CALIBRATION_A,buff);
-    calibration_a=atof(buff);
+    }*/
+    displaying_unit=UNIT_TYPE_PCS;
     
     display(DISPLAY_TYPE_PLEASE_WAIT,0);
     
@@ -917,7 +960,19 @@ int main(int argc,char* argv[])
             switch(state)
             {
                 case STATE_PM25:
-                    display(DISPLAY_TYPE_PLEASE_WAIT,0);
+                    if(current_display_data<0)
+                    {
+                        display(DISPLAY_TYPE_PLEASE_WAIT,0);
+                    }
+                    else
+                    {
+                        converted=data_convert(current_display_data,displaying_unit);
+                        display(DISPLAY_TYPE_DATA,converted);
+                    }
+                    break;
+                case STATE_TIME:
+                    current_displaying_unit=UNIT_TYPE_PCS;
+                    display(DISPLAY_TYPE_TIME,0);
                     break;
                 case STATE_WIFI_SETUP:
                     //Clear data spinner battery wifi
@@ -942,7 +997,11 @@ int main(int argc,char* argv[])
                     state=STATE_PM25;
                     break;
                 case STATE_ID:
-                    if(current_state==STATE_PM25)
+                    if
+                    (
+                        current_state==STATE_PM25||
+                        current_state==STATE_TIME
+                    )
                     {
                         //Clear data and spinner
                         count=0;
@@ -975,7 +1034,14 @@ int main(int argc,char* argv[])
         }
         
         //Spinner
-        if(state==STATE_PM25&&last_spinner_frame!=spinner_frame)
+        if
+        (
+            (
+                state==STATE_PM25||
+                state==STATE_TIME
+            )&&
+            last_spinner_frame!=spinner_frame
+        )
         {
             last_spinner_frame=spinner_frame;
             display(DISPLAY_TYPE_SPINNER,spinner_frame);
@@ -1007,7 +1073,14 @@ int main(int argc,char* argv[])
         }
         
         //New Data
-        if(state==STATE_PM25&&new_data)
+        if
+        (
+            (
+                state==STATE_PM25||
+                state==STATE_TIME
+            )&&
+            new_data
+        )
         {
             debug+=200;
             
@@ -1034,12 +1107,6 @@ int main(int argc,char* argv[])
                 raw+=sensor_data[i];
             }
             raw/=current_data_number;
-            
-            //Apply calibration
-            raw*=calibration_m;
-            raw+=calibration_a;
-            
-            converted=data_convert(raw,current_displaying_unit);
             current_display_data=raw;
             
 #if PIN_VER==5
@@ -1050,7 +1117,15 @@ int main(int argc,char* argv[])
             start_timer(NULL);
 #endif
             
-            display(DISPLAY_TYPE_DATA,converted);
+            if(state==STATE_TIME)
+            {
+                display(DISPLAY_TYPE_TIME,0);
+            }
+            else if(state==STATE_PM25)
+            {
+                converted=data_convert(raw,current_displaying_unit);
+                display(DISPLAY_TYPE_DATA,converted);
+            }
             
             if(++data_send_counter>=DATA_SEND_INTERVAL)
             {
@@ -1128,9 +1203,9 @@ int main(int argc,char* argv[])
                 display(DISPLAY_TYPE_UNIT,0);
                 converted=data_convert(current_display_data,displaying_unit);
                 display(DISPLAY_TYPE_DATA,converted);
-                sprintf(buff,(displaying_unit==UNIT_TYPE_PCS)? "pcs":"ug");
-                set_config(CONFIG_KEY_UNIT,buff);
-                dump_config(CONFIG_FILE);
+                //sprintf(buff,(displaying_unit==UNIT_TYPE_PCS)? "pcs":"ug");
+                //set_config(CONFIG_KEY_UNIT,buff);
+                //dump_config(CONFIG_FILE);
                 start_timer(NULL);
             }
             else

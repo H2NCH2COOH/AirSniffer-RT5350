@@ -64,6 +64,8 @@ struct image image_spinner[SPINNER_FRAME_COUNT]=
     {"/imgs/spinner/5.img",SPINNER_WIDTH,SPINNER_HEIGHT,NULL},
 };
 struct image image_spinner_blank={"/imgs/spinner/blank.img",SPINNER_WIDTH,SPINNER_HEIGHT,NULL};
+
+struct image image_time_colon={"/imgs/time/colon.img",TIME_COLON_WIDTH,TIME_COLON_HEIGHT,NULL};
 /*---------------------------------------------------------------------------*/
 int load_image(struct image* img)
 {

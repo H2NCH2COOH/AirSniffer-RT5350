@@ -14,7 +14,7 @@ fi
 
 cd /tmp
 
-OUT=$(tftp -g -r $file $HOST)
+OUT=$(tftp -g -r $file $HOST 2>&1)
 
 if [ "$?" == "0" ]; then
     #Success
@@ -26,7 +26,7 @@ if [ "$?" == "0" ]; then
     source new.conf
     
     if [ -n "$mac" ]; then
-        cat /dev/mtd2 > /hexd
+        cat /dev/mtd2 > hexd
         
         old_IFS=$IFS
         IFS=':'
@@ -37,15 +37,15 @@ if [ "$?" == "0" ]; then
         done
         IFS=$old_IFS
         
-        printf "$fs" | dd of=/hexd bs=1 seek=4 count=6 conv=notrunc
+        printf "$fs" | dd of=hexd bs=1 seek=4 count=6 conv=notrunc
         
         mtd erase factory
-        mtd write /hexd factory
-        rm /hexd
+        mtd write hexd factory
+        rm hexd
     fi
     
     if [ "$update" == "on" ]; then
-        cfg_updater new.conf $CONFIG_FILE
+        OUT=$("$OUT@@@@@$UPDATER new.conf $CONFIG_FILE 2>&1")
     else
         cat new.conf > $CONFIG_FILE
     fi

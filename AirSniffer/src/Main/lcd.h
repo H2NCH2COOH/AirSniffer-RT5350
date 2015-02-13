@@ -82,6 +82,7 @@ void display_spinner(int frame);
 void display_int(int num,int max_digit,int max,int min,struct image* digits,struct image* blank,struct image* minus,unsigned int x,unsigned int y);
 void display_id(char* id);
 void display_ip(char* ip);
+void display_time(char* time);
 /*---------------------------------------------------------------------------*/
 
 #endif

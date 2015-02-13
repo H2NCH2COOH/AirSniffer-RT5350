@@ -12,13 +12,13 @@ fi
 
 cd /tmp
 
-OUT=$(tftp -g -r $file $HOST)
+OUT=$(tftp -g -r $file $HOST 2>&1)
 
 if [ "$?" == "0" ]; then
     #Success
     killall $APP
     
-    OUT="$OUT@@@@@$(opkg install $file)"
+    OUT="$OUT@@@@@$(opkg install $file 2>&1)"
     (sleep 10; Welcome; reboot)&
     
     cat << EOF

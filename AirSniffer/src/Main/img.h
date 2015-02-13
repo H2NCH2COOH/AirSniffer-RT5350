@@ -74,6 +74,12 @@
 #define IP_X_STA            10
 #define IP_Y_STA            26
 
+//Time "xx:yy"
+#define TIME_COLON_WIDTH    10
+#define TIME_COLON_HEIGHT   NUM_HEIGHT
+#define TIME_X_STA          15
+#define TIME_Y_STA          40
+
 struct image
 {
     const char* file_name;
@@ -119,6 +125,8 @@ extern struct image image_ip_title;
 
 extern struct image image_spinner[SPINNER_FRAME_COUNT];
 extern struct image image_spinner_blank;
+
+extern struct image image_time_colon;
 
 int load_image(struct image* img);
 void free_image(struct image* img);

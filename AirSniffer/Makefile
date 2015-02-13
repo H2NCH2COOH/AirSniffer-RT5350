@@ -42,6 +42,7 @@ define Package/$(PKG_NAME)/install
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/Main/AirSniffer $(1)/usr/bin/
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/Main/Welcome $(1)/usr/bin/
 	$(INSTALL_BIN) ./files/Main/read_temp.sh $(1)/usr/bin/
+	$(INSTALL_BIN) ./files/Main/change_mac.sh $(1)/usr/bin/
 	
 	#$(INSTALL_DIR) $(1)/
 	#$(INSTALL_BIN) ./files/Main/dev_setup.sh $(1)/
