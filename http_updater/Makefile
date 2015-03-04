@@ -34,6 +34,7 @@ define Package/$(PKG_NAME)/install
 	
 	$(INSTALL_DIR) $(1)/usr/bin
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/cfg_updater $(1)/usr/bin/
+	$(INSTALL_BIN) $(PKG_BUILD_DIR)/urldecoder $(1)/usr/bin/
 endef
 
 $(eval $(call BuildPackage,$(PKG_NAME)))

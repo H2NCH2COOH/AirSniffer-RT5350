@@ -4,7 +4,7 @@ APP=AirSniffer
 UPDATER=cfg_updater
 CONFIG_FILE=/etc/config/device.conf
 
-eval $(echo "$QUERY_STRING"|awk -F'&' '{for(i=1;i<=NF;i++){print $i}}')
+eval $(echo "$QUERY_STRING"|awk -F'&' '{for(i=1;i<=NF;i++){print $i}}'|urldecoder)
 
 if [ "$useip" == "on" ]; then
     HOST=$ip

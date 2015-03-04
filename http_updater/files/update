@@ -2,7 +2,7 @@
 
 APP=AirSniffer
 
-eval $(echo "$QUERY_STRING"|awk -F'&' '{for(i=1;i<=NF;i++){print $i}}')
+eval $(echo "$QUERY_STRING"|awk -F'&' '{for(i=1;i<=NF;i++){print $i}}'|urldecoder)
 
 if [ "$useip" == "on" ]; then
     HOST=$ip
