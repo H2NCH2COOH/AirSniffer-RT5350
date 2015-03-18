@@ -847,6 +847,7 @@ int main(int argc,char* argv[])
     struct itimerval itv;
     int last_spinner_frame;
     time_t time;
+    double cali_m,cali_a;
     
     printf("[AirSniffer][Main]Start\n");
     
@@ -879,7 +880,25 @@ int main(int argc,char* argv[])
     act.sa_flags=SA_RESTART;
     sigaction(SIGALRM,&act,NULL);
     
-    //Read configs from file
+    //Read calibration
+    if(read_config(CALI_FILE)<0)
+    {
+        cali_m=1.0;
+        cali_a=0.0;
+        set_config(CONFIG_KEY_CALI_M,"1");
+        set_config(CONFIG_KEY_CALI_A,"0");
+        dump_config(CALI_FILE);
+    }
+    else
+    {
+        get_config(CONFIG_KEY_CALI_M,buff);
+        cali_m=atof(buff);
+        get_config(CONFIG_KEY_CALI_A,buff);
+        cali_a=atof(buff);
+    }
+    free_config();
+    
+    //Read configs from device.conf
     if(read_config(CONFIG_FILE)<0)
     {
         fprintf(stderr,"[AirSniffer][Main]Error reading config\nPanic & Exit\n");
@@ -1107,6 +1126,11 @@ int main(int argc,char* argv[])
                 raw+=sensor_data[i];
             }
             raw/=current_data_number;
+            
+            //calibrate
+            raw*=cali_m;
+            raw+=cali_a;
+            
             current_display_data=raw;
             
 #if PIN_VER==5

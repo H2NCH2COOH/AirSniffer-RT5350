@@ -9,4 +9,7 @@
 #define CONFIG_KEY_TELNET           "telnet"
 #define CONFIG_KEY_UNIT             "unit"
 
+#define CONFIG_KEY_CALI_M           "cali_m"
+#define CONFIG_KEY_CALI_A           "cali_a"
+
 #endif /* _AS_CONFIG_KEY_H_ */

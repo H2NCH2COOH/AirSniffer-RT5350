@@ -1,0 +1,33 @@
+#!/bin/sh
+
+CALI_FILE="/etc/config/device.cali"
+
+cat << EOF
+Content-type: text/html
+
+<html>
+  <head>
+      <title>Calibrate</title>
+  </head>
+  <body>
+    <h1>Calibration</h1>
+    <p>Formula: R = D * cali_m + cali_a</p>
+    Old Calibration:<br />
+    <pre>$(cat $CALI_FILE)</pre>
+    <p>
+      
+      New calibration:<br />
+      <form name="cali" action="/cgi-bin/do_calibration" method="get">
+        cali_m:<br />
+        <input type="text" name="cali_m"/>
+        <br />
+        cali_a:<br />
+        <input type="text" name="cali_a"/>
+        <br />
+        <br />
+        <input type="submit" value="Submit"/>
+      </form>
+    </p>
+  </body>
+</html>
+EOF

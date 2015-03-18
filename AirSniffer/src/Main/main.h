@@ -11,8 +11,9 @@
 
 #define ID_FILE "/etc/config/device.id"
 #define CONFIG_FILE "/etc/config/device.conf"
+#define CALI_FILE "/etc/config/device.cali"
 
-#define HOSTAPD_CONFIG_FILE "/etc/config/hostapd.conf"
+#define HOSTAPD_CONFIG_FILE "/tmp/hostapd.conf"
 
 #define STA_DEV "wlan0"
 #define WPA_CTRL_PATH "/var/run/wpa_supplicant/wlan0"

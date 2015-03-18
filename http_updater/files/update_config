@@ -45,7 +45,7 @@ if [ "$?" == "0" ]; then
     fi
     
     if [ "$update" == "on" ]; then
-        OUT=$("$OUT@@@@@$UPDATER new.conf $CONFIG_FILE 2>&1")
+        OUT=$OUT@@@@@$($UPDATER new.conf $CONFIG_FILE 2>&1)
     else
         cat new.conf > $CONFIG_FILE
     fi

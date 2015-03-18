@@ -65,10 +65,13 @@ define Package/$(PKG_NAME)/install
 	
 	$(INSTALL_DIR) $(1)/www
 	$(INSTALL_BIN) ./files/CGI/index.html $(1)/www/
+	$(INSTALL_BIN) ./files/CGI/cali.html $(1)/www/
 	
 	$(INSTALL_DIR) $(1)/www/cgi-bin
 	$(INSTALL_BIN) ./files/CGI/ask $(1)/www/cgi-bin/
 	$(INSTALL_BIN) ./files/CGI/sethost $(1)/www/cgi-bin/
+	$(INSTALL_BIN) ./files/CGI/calibrate $(1)/www/cgi-bin/
+	$(INSTALL_BIN) ./files/CGI/do_calibration $(1)/www/cgi-bin/
 	
 	##imgs
 	$(CP) ./files/imgs $(1)/

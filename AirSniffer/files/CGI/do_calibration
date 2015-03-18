@@ -1,0 +1,26 @@
+#!/bin/sh
+
+CALI_FILE="/etc/config/device.cali"
+
+eval $(echo "$QUERY_STRING"|awk -F'&' '{for(i=1;i<=NF;i++){print $i}}'|urldecoder)
+
+cat > $CALI_FILE << EOF
+cali_m=$cali_m
+cali_a=$cali_a
+EOF
+
+(sleep 10;Welcome;reboot)&
+
+cat << EOF
+Content-type: text/html
+
+<html>
+    <head>
+        <title>Success</title>
+    </head>
+    <body>
+        <h2>Device calibration updated</h2>
+        <p>reboot in 10 seconds</p>
+    </body>
+</html>
+EOF

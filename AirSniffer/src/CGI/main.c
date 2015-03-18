@@ -209,7 +209,7 @@ int main(int argc,char* argv[])
 				recv_event(str);
 				if(strstr(str,WPA_EVENT_CONNECTED)!=NULL)
 				{
-					//Received scan results
+					//Connected
 					break;
 				}
 			}
@@ -226,7 +226,7 @@ int main(int argc,char* argv[])
 		else
 		{
 			//printf("Failed to connect to SSID:%s<br />Please retry",argv[1]);
-            ret=-1;
+            ret=1;
         }
 	}
 
