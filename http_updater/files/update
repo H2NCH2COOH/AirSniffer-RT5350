@@ -1,55 +1,28 @@
 #!/bin/sh
 
-APP=AirSniffer
+VERSION=/etc/config/device.version
 
-eval $(echo "$QUERY_STRING"|awk -F'&' '{for(i=1;i<=NF;i++){print $i}}'|urldecoder)
-
-if [ "$useip" == "on" ]; then
-    HOST=$ip
-else
-    HOST=$REMOTE_ADDR
-fi
-
-cd /tmp
-
-OUT=$(tftp -g -r $file $HOST 2>&1)
-
-if [ "$?" == "0" ]; then
-    #Success
-    killall $APP
-    
-    OUT="$OUT@@@@@$(opkg install $file 2>&1)"
-    (sleep 10; Welcome; reboot)&
-    
-    cat << EOF
+cat << EOF
 Content-type: text/html
 
 <html>
-    <head>
-        <title>Success</title>
-    </head>
     <body>
-        <h2>Device updated</h2>
-        <p>reboot in 10 seconds</p>
+        <h1>Update</h1>
+        Current version: $(cat $VERSION) <br />
+        <form name="query" action="/cgi-bin/do_update" method="get">
+            File name:
+            <br />
+            <input type="text" name="file"/>
+            <br />
+            IP:
+            <br />
+            <input type="text" name="ip"/>
+            <input type="checkbox" name="useip"/>
+            <br />
+            <br />
+            <input type="submit" value="Submit"/>
+        </form>
     </body>
 </html>
-EOF
-    
-else
-    #Failed
-    cat << EOF
-Content-type: text/html
 
-<html>
-    <head>
-        <title>Failed</title>
-    </head>
-    <body>
-        <h2>Update Failed</h2>
-        <p>$OUT</p>
-    </body>
-</html>
 EOF
-fi
-
-rm $file

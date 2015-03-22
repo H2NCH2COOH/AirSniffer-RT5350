@@ -30,6 +30,7 @@ define Package/$(PKG_NAME)/install
 	
 	$(INSTALL_DIR) $(1)/www/cgi-bin
 	$(INSTALL_BIN) ./files/update $(1)/www/cgi-bin/
+	$(INSTALL_BIN) ./files/do_update $(1)/www/cgi-bin/
 	$(INSTALL_BIN) ./files/update_config $(1)/www/cgi-bin/
 	
 	$(INSTALL_DIR) $(1)/usr/bin
