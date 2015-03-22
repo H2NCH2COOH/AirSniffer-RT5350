@@ -12,7 +12,7 @@ cat /dev/mtd2 > hexd
 
 old_IFS=$IFS
 IFS=':'
-array=$1
+array=$mac_addr
 fs=""
 for i in $array; do
     fs="$fs\x$i"
